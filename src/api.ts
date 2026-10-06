@@ -9,19 +9,47 @@ export interface User {
   must_change_password: boolean;
 }
 
+/** One version of a flow or a master table with its effective range (payroll periods YYYY-MM). */
+export interface VersionInfo {
+  version: number;
+  effective_from: string;
+  /** last period it applies to; null = open-ended (or superseded / cancelled) */
+  effective_to: string | null;
+  state: 'current' | 'past' | 'future' | 'superseded' | 'cancelled';
+  note: string | null;
+  by: string | null;
+  at: string;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
+}
+
 export interface FlowSummary {
   id: string;
   name: string;
   sort: number;
   active: boolean;
-  published: { version: number; by: string; at: string; config: FlowConfig } | null;
+  /** version in force now (or the latest one if none applies yet) */
+  published: (VersionInfo & { config: FlowConfig }) | null;
+  versions: VersionInfo[];
   hasDraft?: boolean;
 }
 
 export interface FlowDetail {
   flow: { id: string; name: string; sort: number; active: boolean };
-  versions: { version: number; status: string; created_by: string; created_at: string }[];
+  versions: VersionInfo[];
   draft: { config: FlowConfig; by: string; at: string } | null;
+}
+
+/** A master table as it applies to a period. */
+export type MasterAt = MasterTable & { version: number; effective_from: string; effective_to: string | null; note: string | null; by: string | null; at: string };
+
+export interface MasterVersionData extends MasterTable {
+  version: number;
+  effective_from: string;
+  note: string | null;
+  by: string | null;
+  at: string;
+  cancelled: boolean;
 }
 
 export interface LedgerMark {
@@ -95,15 +123,31 @@ export const api = {
 
   flows: () => call<{ flows: FlowSummary[] }>('GET', '/api/flows'),
   flow: (id: string) => call<FlowDetail>('GET', `/api/flows/${enc(id)}`),
-  version: (id: string, v: number) => call<{ version: number; by: string; at: string; config: FlowConfig }>('GET', `/api/flows/${enc(id)}/versions/${v}`),
+  version: (id: string, v: number) =>
+    call<{ version: number; by: string; at: string; effective_from: string; note: string | null; cancelled: boolean; config: FlowConfig }>('GET', `/api/flows/${enc(id)}/versions/${v}`),
+  effectiveFlow: (id: string, period: string) =>
+    call<{ flow: { id: string; name: string }; period: string; effective: (VersionInfo & { config: FlowConfig }) | null; versions: VersionInfo[] }>(
+      'GET',
+      `/api/flows/${enc(id)}/effective?period=${enc(period)}`,
+    ),
+  flowVersionAction: (id: string, v: number, action: 'cancel' | 'restore') => call<{ ok: true; versions: VersionInfo[] }>('POST', `/api/flows/${enc(id)}/versions/${v}`, { action }),
   createFlow: (id: string, name: string, config: FlowConfig) => call('POST', '/api/flows', { id, name, config }),
   patchFlow: (id: string, patch: { name?: string; sort?: number; active?: boolean }) => call('PATCH', `/api/flows/${enc(id)}`, patch),
   saveDraft: (id: string, config: FlowConfig) => call<{ ok: true; errors: ConfigError[] }>('PUT', `/api/flows/${enc(id)}/draft`, { config }),
   deleteDraft: (id: string) => call('DELETE', `/api/flows/${enc(id)}/draft`),
-  publish: (id: string, fromVersion?: number) => call<{ ok: true; version: number }>('POST', `/api/flows/${enc(id)}/publish`, fromVersion === undefined ? {} : { fromVersion }),
+  publish: (id: string, o: { effectiveFrom: string; note?: string; fromVersion?: number }) =>
+    call<{ ok: true; version: number; versions: VersionInfo[] }>('POST', `/api/flows/${enc(id)}/publish`, o),
 
-  masters: () => call<{ tables: (MasterTable & { updated_by: string | null; updated_at: string | null })[] }>('GET', '/api/masters'),
-  putMaster: (t: MasterTable) => call('PUT', `/api/masters/${enc(t.name)}`, { columns: t.columns, rows: t.rows }),
+  /** Tables that apply to a payroll period (default: now) + every table's version list. */
+  masters: (period?: string) =>
+    call<{ period: string; tables: MasterAt[]; catalog: { name: string; versions: VersionInfo[] }[] }>('GET', `/api/masters${period ? `?period=${enc(period)}` : ''}`),
+  masterVersions: (name: string) => call<{ name: string; versions: VersionInfo[] }>('GET', `/api/masters/${enc(name)}`),
+  masterVersion: (name: string, v: number) => call<MasterVersionData>('GET', `/api/masters/${enc(name)}/versions/${v}`),
+  /** Never overwrites: adds a version effective from `effectiveFrom`. */
+  putMaster: (t: MasterTable, effectiveFrom: string, note?: string) =>
+    call<{ ok: true; version: number; versions: VersionInfo[] }>('PUT', `/api/masters/${enc(t.name)}`, { columns: t.columns, rows: t.rows, effectiveFrom, note }),
+  masterVersionAction: (name: string, v: number, action: 'cancel' | 'restore') =>
+    call<{ ok: true; versions: VersionInfo[] }>('POST', `/api/masters/${enc(name)}/versions/${v}`, { action }),
   deleteMaster: (name: string) => call('DELETE', `/api/masters/${enc(name)}`),
 
   users: () => call<{ users: UserRow[] }>('GET', '/api/users'),
@@ -114,10 +158,11 @@ export const api = {
   putLedgerMark: (ledger: string, last_period: string, file_hash: string) => call('PUT', `/api/ledger-marks/${enc(ledger)}`, { last_period, file_hash }),
 
   runs: () => call<{ latest: RunLogRow[] }>('GET', '/api/runs'),
-  logRun: (flow_id: string, flow_version: number | null, period: string) => call('POST', '/api/runs', { flow_id, flow_version, period }),
+  logRun: (flow_id: string, flow_version: number | null, period: string, master_versions: Record<string, number>) =>
+    call('POST', '/api/runs', { flow_id, flow_version, period, master_versions }),
 
   backup: () => call<unknown>('GET', '/api/backup'),
-  importBackup: (data: unknown) => call<{ ok: true; masters: number; flows: number; texts: number }>('POST', '/api/backup', data),
+  importBackup: (data: unknown) => call<{ ok: true; masters: number; masterVersions: number; flows: number; texts: number }>('POST', '/api/backup', data),
 
   texts: () => call<{ texts: Record<string, string> }>('GET', '/api/ui-texts'),
   putText: (key: string, value: string) => call<{ ok: true; key: string; value: string }>('PUT', `/api/ui-texts/${enc(key)}`, { value }),

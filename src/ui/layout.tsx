@@ -137,6 +137,32 @@ export function Card({ title, actions, children, className, step }: { title?: Re
   );
 }
 
+/** Centered dialog (fixed overlay, so it never moves the page). Esc or the backdrop closes it. */
+export function Modal({ title, children, footer, onClose, wide }: { title: ReactNode; children: ReactNode; footer?: ReactNode; onClose: () => void; wide?: boolean }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+  return createPortal(
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={wide ? 'modal wide' : 'modal'} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}>
+        <div className="modal-head">
+          <div className="modal-title">{title}</div>
+          <button type="button" className="icon-btn" aria-label="Đóng" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';

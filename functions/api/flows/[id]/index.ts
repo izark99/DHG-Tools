@@ -1,16 +1,13 @@
 import { body, error, json, requireAdmin, requireUser, route, type Handler } from '../../../_lib/http';
+import { flowVersionInfo, publishedMeta } from '../../../_lib/flows';
 
-// GET → flow metadata + version list (+ draft config for admin).
+// GET → flow metadata + version list with effective ranges (+ draft config for admin).
 export const onRequestGet: Handler = route(async ({ env, data, params }) => {
   const me = requireUser(data);
   const id = String(params.id);
   const flow = await env.DB.prepare('SELECT id, name, sort, active FROM flows WHERE id = ?').bind(id).first<{ active: number }>();
   if (!flow || (!flow.active && me.role !== 'admin')) return error(404, 'Không có flow này');
-  const { results } = await env.DB.prepare(
-    `SELECT version, status, created_by, created_at FROM flow_versions WHERE flow_id = ? ORDER BY status = 'draft' DESC, version DESC`,
-  )
-    .bind(id)
-    .all<{ version: number; status: string }>();
+  const versions = flowVersionInfo((await publishedMeta(env.DB, id)).get(id) ?? []);
   let draft = null;
   if (me.role === 'admin') {
     const d = await env.DB.prepare(`SELECT config_json, created_by, created_at FROM flow_versions WHERE flow_id = ? AND status = 'draft'`)
@@ -18,7 +15,7 @@ export const onRequestGet: Handler = route(async ({ env, data, params }) => {
       .first<{ config_json: string; created_by: string; created_at: string }>();
     if (d) draft = { config: JSON.parse(d.config_json), by: d.created_by, at: d.created_at };
   }
-  return json({ flow: { ...flow, active: !!flow.active }, versions: results.filter((v) => v.status === 'published'), draft });
+  return json({ flow: { ...flow, active: !!flow.active }, versions, draft });
 });
 
 // PATCH {name?, sort?, active?} (admin)

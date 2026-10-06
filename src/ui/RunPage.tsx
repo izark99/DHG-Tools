@@ -6,26 +6,15 @@ import { Card, PageHeader } from './layout';
 import { RunWizard } from './RunWizard';
 import { Guide, T } from './texts';
 
-/** Run the latest published version of a flow. */
+/** Run a flow: the wizard uses the published version that applies to the chosen payroll period. */
 export function RunPage({ flowId, user }: { flowId: string; user: User }) {
-  const data = useAsync(async () => {
-    const [flows, masters] = await Promise.all([api.flows(), api.masters()]);
-    return { flow: flows.flows.find((f) => f.id === flowId) ?? null, masters: masters.tables };
-  }, [flowId]);
-  if (data.loading) return <div className="loading">Đang tải cấu hình…</div>;
+  const data = useAsync(() => api.flows(), [flowId]);
+  if (data.loading && !data.data) return <div className="loading">Đang tải cấu hình…</div>;
   if (data.error) return <Alert kind="error">{data.error}</Alert>;
-  const f = data.data!.flow;
-  if (!f || !f.published) return <Alert kind="error">Flow "{flowId}" không tồn tại hoặc chưa được publish.</Alert>;
-  return (
-    <RunWizard
-      key={`${f.id}-${f.published.version}`}
-      config={f.published.config}
-      version={f.published.version}
-      masters={data.data!.masters}
-      user={user}
-      testMode={false}
-    />
-  );
+  const f = data.data!.flows.find((x) => x.id === flowId);
+  if (!f || !f.versions.some((v) => v.state !== 'cancelled' && v.state !== 'superseded'))
+    return <Alert kind="error">Flow "{flowId}" không tồn tại hoặc chưa được publish.</Alert>;
+  return <RunWizard key={f.id} flowId={f.id} user={user} testMode={false} />;
 }
 
 /** Run a configuration loaded from a JSON file (test run; nothing is recorded). */
@@ -33,7 +22,6 @@ export function RunFromFile({ user }: { user: User }) {
   const [config, setConfig] = useState<FlowConfig | null>(null);
   const [loadNo, setLoadNo] = useState(0);
   const [err, setErr] = useState('');
-  const masters = useAsync(() => api.masters(), []);
   return (
     <>
       {!config && (
@@ -68,9 +56,8 @@ export function RunFromFile({ user }: { user: User }) {
         }}
       />
       {err && <Alert kind="error">{err}</Alert>}
-      {masters.error && <Alert kind="error">{masters.error}</Alert>}
       </Card>
-      {config && masters.data && <RunWizard key={loadNo} config={config} version={null} masters={masters.data.tables} user={user} testMode />}
+      {config && <RunWizard key={loadNo} config={config} user={user} testMode />}
     </>
   );
 }

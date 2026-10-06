@@ -1,12 +1,13 @@
 // Run wizard: period & parameters → inputs (+ ledger) → column mapping → compute → checks → preview → download.
 // All payroll data stays in this component's memory; nothing is sent to the server.
-import { useMemo, useState } from 'react';
-import { api, errMsg, type User } from '../api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api, errMsg, type MasterAt, type User, type VersionInfo } from '../api';
 import { proposeMapping, readInput, normalizeHeader, type MappingProposal, type ParsedInput, type RawSheet } from '../engine/inputs';
 import { emptyLedger, hasRowsFor, laterPeriods, periodOf } from '../engine/ledger';
 import { runFlow, type RunResult } from '../engine/run';
 import type { FlowConfig, InputDef, MasterTable, Scalar } from '../engine/types';
 import { contextFromMasters, validateConfig } from '../engine/validate';
+import { periodLabel } from '../engine/effective';
 import { readLedger, writeLedger, type LedgerRead } from '../excel/ledgerFile';
 import { readSheets } from '../excel/read';
 import { ledgerFileName, writeForms } from '../excel/writeForms';
@@ -35,17 +36,27 @@ function missingRequired(def: InputDef, proposal: MappingProposal): string[] {
   return def.fields.filter((f) => f.required && proposal.mapping[f.id] === undefined).map((f) => f.id);
 }
 
+interface PeriodCtl {
+  month: number;
+  year: number;
+  setMonth: (m: number) => void;
+  setYear: (y: number) => void;
+}
+
+/**
+ * Run a flow for a payroll period. The flow version (when `flowId` is given) and every master table
+ * are the versions effective for the chosen period, so re-running an old period uses the old rules.
+ * With `config` (test run from the editor or a JSON file) only the master tables follow the period.
+ */
 export function RunWizard({
-  config,
-  version,
-  masters,
+  flowId,
+  config: staticConfig,
   user,
   testMode,
   embedded,
 }: {
-  config: FlowConfig;
-  version: number | null;
-  masters: MasterTable[];
+  flowId?: string;
+  config?: FlowConfig;
   user: User;
   testMode: boolean;
   /** inside another page (flow editor): no page header */
@@ -54,6 +65,134 @@ export function RunWizard({
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const period = periodOf(year, month);
+  const ctx = useAsync(async () => {
+    const [eff, m] = await Promise.all([flowId ? api.effectiveFlow(flowId, period) : Promise.resolve(null), api.masters(period)]);
+    return { eff, masters: m.tables, period };
+  }, [flowId, period]);
+  // keep showing the last config while another period loads (no flicker, inputs kept)
+  const last = useRef<{ config: FlowConfig; info: VersionInfo | null } | null>(null);
+  const eff = ctx.data?.eff?.effective ?? null;
+  const fresh = ctx.data && ctx.data.period === period && !ctx.loading;
+  if (staticConfig) last.current = { config: staticConfig, info: null };
+  else if (eff && ctx.data?.period === period) last.current = { config: eff.config, info: eff };
+  const ctl: PeriodCtl = { month, year, setMonth, setYear };
+
+  if (ctx.error && !ctx.data) return <Alert kind="error">{ctx.error}</Alert>;
+  if (!last.current) {
+    if (!ctx.data) return <div className="loading">Đang tải cấu hình…</div>;
+    // no version of this flow applies to the chosen period, and none was shown before
+    return <NoVersion flowId={flowId!} versions={ctx.data.eff?.versions ?? []} period={period} ctl={ctl} />;
+  }
+  const noVersion = !!flowId && !!fresh && !eff;
+  return (
+    <WizardBody
+      config={last.current.config}
+      info={last.current.info}
+      masters={ctx.data?.masters ?? []}
+      ctl={ctl}
+      loading={!fresh}
+      blocked={noVersion ? `Kỳ ${String(month).padStart(2, '0')}/${year} không có phiên bản nào của flow này có hiệu lực.` : ctx.error}
+      user={user}
+      testMode={testMode}
+      embedded={embedded}
+    />
+  );
+}
+
+function MonthYear({ ctl, onChange }: { ctl: PeriodCtl; onChange?: () => void }) {
+  // the year is typed freely; only a full year (2000–2100) changes the period
+  const [yearText, setYearText] = useState(String(ctl.year));
+  return (
+    <>
+      <label className="field">
+        <span>Tháng</span>
+        <select
+          value={ctl.month}
+          onChange={(e) => {
+            onChange?.();
+            ctl.setMonth(Number(e.target.value));
+          }}
+        >
+          {Array.from({ length: 12 }, (_, i) => (
+            <option key={i + 1} value={i + 1}>
+              {i + 1}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Năm</span>
+        <input
+          type="number"
+          min={2000}
+          max={2100}
+          value={yearText}
+          onChange={(e) => {
+            setYearText(e.target.value);
+            const y = Number(e.target.value);
+            if (Number.isInteger(y) && y >= 2000 && y <= 2100 && y !== ctl.year) {
+              onChange?.();
+              ctl.setYear(y);
+            }
+          }}
+        />
+      </label>
+    </>
+  );
+}
+
+function NoVersion({ flowId, versions, period, ctl }: { flowId: string; versions: VersionInfo[]; period: string; ctl: PeriodCtl }) {
+  const active = versions.filter((v) => v.state !== 'cancelled' && v.state !== 'superseded').sort((a, b) => (a.effective_from < b.effective_from ? -1 : 1));
+  return (
+    <>
+      <PageHeader icon="play" crumb={<a href="#/">Chạy flow</a>} title={flowId} />
+      <Card step={1} title="Kỳ">
+        <div className="form-grid">
+          <MonthYear ctl={ctl} />
+        </div>
+        <Alert kind="warning">
+          Kỳ {periodLabel(period)} chưa có phiên bản nào của flow này có hiệu lực.
+          {active.length > 0 && (
+            <ul>
+              {active.map((v) => (
+                <li key={v.version}>
+                  v{v.version}: {rangeLabel(v)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      </Card>
+    </>
+  );
+}
+
+function WizardBody({
+  config,
+  info,
+  masters,
+  ctl,
+  loading,
+  blocked,
+  user,
+  testMode,
+  embedded,
+}: {
+  config: FlowConfig;
+  info: VersionInfo | null;
+  masters: MasterAt[];
+  ctl: PeriodCtl;
+  /** the version / masters of the chosen period are still loading */
+  loading: boolean;
+  /** why the chosen period cannot run (no version applies, load error) */
+  blocked: string | null;
+  user: User;
+  testMode: boolean;
+  embedded?: boolean;
+}) {
+  const { month, year } = ctl;
+  const version = info?.version ?? null;
   const [params, setParams] = useState<Record<string, string>>(() => Object.fromEntries(config.runParams.map((p) => [p.id, p.default ?? ''])));
   const [inputs, setInputs] = useState<Record<string, InputState>>({});
   const [ledgerFile, setLedgerFile] = useState<{ name: string; read: LedgerRead } | null>(null);
@@ -67,13 +206,35 @@ export function RunWizard({
   const needLedger = usesLedger(config);
   const mark = useAsync(() => (needLedger ? api.ledgerMark(ledgerName) : Promise.resolve({ mark: null })), [ledgerName, needLedger]);
   const period = periodOf(year, month);
-  const masterMap = useMemo(() => Object.fromEntries(masters.map((t) => [t.name, t])), [masters]);
+  const masterMap = useMemo(() => Object.fromEntries(masters.map((t) => [t.name, t as MasterTable])), [masters]);
   const configErrors = useMemo(() => validateConfig(config, contextFromMasters(masters)), [config, masters]);
 
   const invalidate = () => {
     setResult(null);
     setMsg(null);
   };
+
+  // Another period can bring another flow version or other master data: drop the result; keep the
+  // uploaded files when the inputs are defined the same way, otherwise ask for them again.
+  const inputsKey = JSON.stringify(config.inputs);
+  const [seenInputs, setSeenInputs] = useState(inputsKey);
+  const [switched, setSwitched] = useState<string | null>(null);
+  useEffect(() => {
+    setResult(null);
+  }, [config, masters]);
+  useEffect(() => {
+    if (inputsKey === seenInputs) return;
+    setSeenInputs(inputsKey);
+    if (Object.keys(inputs).length) {
+      setInputs({});
+      setSwitched(`Kỳ này dùng phiên bản v${version ?? '?'} của flow, khai báo file dữ liệu khác phiên bản trước — vui lòng chọn lại file.`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputsKey]);
+  useEffect(() => {
+    // new run parameters of this version get their defaults; values already typed are kept
+    setParams((p) => Object.fromEntries(config.runParams.map((x) => [x.id, p[x.id] ?? x.default ?? ''])));
+  }, [config]);
 
   // ---- inputs -------------------------------------------------------------
   const loadInput = async (def: InputDef, file: File | undefined) => {
@@ -187,7 +348,8 @@ export function RunWizard({
   const paramsMissing = config.runParams.filter((p) => p.required && !String(params[p.id] ?? '').trim());
   const inputsMissing = config.inputs.filter((d) => d.required && !inputs[d.id]?.parsed);
   const gatesOpen = (Object.keys(gates) as (keyof typeof gates)[]).filter((k) => gates[k] && !confirm[k]);
-  const canCompute = !configErrors.length && !paramsMissing.length && !inputsMissing.length && !gatesOpen.length && !(needLedger && mark.loading);
+  const canCompute =
+    !loading && !blocked && !configErrors.length && !paramsMissing.length && !inputsMissing.length && !gatesOpen.length && !(needLedger && mark.loading);
 
   const compute = () => {
     setBusy('Đang tính…');
@@ -233,7 +395,7 @@ export function RunWizard({
       download(forms.buffer, forms.fileName, XLSX_TYPE);
       if (ledgerOut) setTimeout(() => download(ledgerOut!.buffer, ledgerOut!.name, XLSX_TYPE), 400);
       if (!testMode) {
-        const tasks: Promise<unknown>[] = [api.logRun(config.id, version, result.period)];
+        const tasks: Promise<unknown>[] = [api.logRun(config.id, version, result.period, Object.fromEntries(masters.map((t) => [t.name, t.version])))];
         if (ledgerOut) tasks.push(api.putLedgerMark(ledgerName, result.period, ledgerOut.hash));
         await Promise.all(tasks);
         mark.reload();
@@ -256,7 +418,22 @@ export function RunWizard({
       {required && <em className="req">*</em>}
     </span>
   );
-  const checklist: { ok: boolean; text: string }[] = [
+  const checklist: { ok: boolean; text: string; title?: string }[] = [
+    {
+      ok: !loading && !blocked,
+      text: loading
+        ? 'Đang lấy phiên bản theo kỳ…'
+        : blocked
+          ? 'Kỳ này chưa có phiên bản flow'
+          : info
+            ? `Flow v${info.version} · hiệu lực ${rangeLabel(info)}`
+            : 'Cấu hình đang sửa (chạy thử)',
+    },
+    {
+      ok: !loading && masters.length > 0,
+      text: `Master data kỳ ${String(month).padStart(2, '0')}/${year}: ${masters.length} bảng`,
+      title: masters.map((t) => `${t.name} v${t.version} (${rangeLabel(t)})`).join('\n'),
+    },
     { ok: !configErrors.length, text: configErrors.length ? `Cấu hình còn ${configErrors.length} lỗi` : 'Cấu hình flow hợp lệ' },
     { ok: !paramsMissing.length, text: paramsMissing.length ? `Thiếu: ${paramsMissing.map((p) => p.label).join(', ')}` : `Kỳ ${String(month).padStart(2, '0')}/${year}` },
     { ok: !inputsMissing.length, text: inputsMissing.length ? `Thiếu file: ${inputsMissing.map((d) => d.label || d.id).join(', ')}` : 'Đã có đủ file dữ liệu' },
@@ -280,12 +457,20 @@ export function RunWizard({
         title={config.name}
         subtitle={
           <>
-            <span className="pill">{config.id}</span> {version ? <span className="pill pill-ok">v{version}</span> : null} {testMode ? <span className="pill pill-warn">Chạy thử</span> : null}
+            <span className="pill">{config.id}</span>{' '}
+            {info ? (
+              <span className={info.state === 'current' ? 'pill pill-ok' : 'pill pill-warn'} title={info.note ?? undefined}>
+                v{info.version} · hiệu lực {rangeLabel(info)}
+              </span>
+            ) : null}{' '}
+            {testMode ? <span className="pill pill-warn">Chạy thử</span> : null}
           </>
         }
       />}
       {!embedded && <Guide k="run.guide" addLabel="Thêm hướng dẫn chung cho mọi flow" />}
       {!embedded && <Guide k={`flow.${config.id}.guide`} addLabel={`Thêm hướng dẫn riêng cho flow ${config.id}`} />}
+      {blocked && <Alert kind="error">{blocked}</Alert>}
+      {switched && <Alert kind="info">{switched}</Alert>}
       {testMode && <Alert kind="warning">Chạy thử: file xuất có hậu tố _TEST, không ghi nhật ký chạy, không cập nhật dấu ledger.</Alert>}
       {configErrors.length > 0 && (
         <Alert kind="error">
@@ -304,37 +489,13 @@ export function RunWizard({
         <div className="run-main">
           <Card step={1} title={<T k="run.step1">Kỳ và tham số</T>}>
             <div className="form-grid">
-              <label className="field">
-                {fieldLabel('Tháng')}
-                <select
-                  value={month}
-                  onChange={(e) => {
-                    invalidate();
-                    setConfirm((c) => ({ ...c, replace: false }));
-                    setMonth(Number(e.target.value));
-                  }}
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      {i + 1}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                {fieldLabel('Năm')}
-                <input
-                  type="number"
-                  value={year}
-                  min={2000}
-                  max={2100}
-                  onChange={(e) => {
-                    invalidate();
-                    setConfirm((c) => ({ ...c, replace: false }));
-                    setYear(Number(e.target.value));
-                  }}
-                />
-              </label>
+              <MonthYear
+                ctl={ctl}
+                onChange={() => {
+                  invalidate();
+                  setConfirm((c) => ({ ...c, replace: false }));
+                }}
+              />
               {config.runParams.map((p) => (
                 <label key={p.id} className="field">
                   {fieldLabel(p.label, p.required)}
@@ -475,7 +636,7 @@ export function RunWizard({
           <Card step={3} title={<T k="run.step3">Tính và xuất file</T>} className="sticky-card">
             <ul className="checklist">
               {checklist.map((c, i) => (
-                <li key={i} className={c.ok ? 'ok' : 'todo'}>
+                <li key={i} className={c.ok ? 'ok' : 'todo'} title={c.title}>
                   <Icon name={c.ok ? 'check' : 'alert'} size={16} />
                   <span>{c.text}</span>
                 </li>
@@ -635,4 +796,9 @@ function colLetter(i: number): string {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+/** "07/2026 → hiện hành", "từ đầu → 06/2026" */
+export function rangeLabel(v: { effective_from: string; effective_to: string | null }): string {
+  return `${periodLabel(v.effective_from)} → ${periodLabel(v.effective_to)}`;
 }

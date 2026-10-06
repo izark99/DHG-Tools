@@ -1,8 +1,10 @@
-// Version list, JSON diff, re-publish an older version (rollback = publish it again as a new version).
+// Version timeline (effective periods), JSON diff, re-publish an older version as a new version,
+// cancel / restore a version's effect. Versions are never deleted.
 import { useState } from 'react';
-import { api, errMsg } from '../../api';
+import { api, errMsg, type VersionInfo } from '../../api';
 import type { FlowConfig } from '../../engine/types';
 import { Alert } from '../common';
+import { EffectiveDialog, range, VersionTable } from './Effective';
 
 type DiffLine = { op: ' ' | '+' | '-'; text: string };
 
@@ -65,7 +67,7 @@ export function Versions({
   onRepublished,
 }: {
   flowId: string;
-  versions: { version: number; created_by: string; created_at: string }[];
+  versions: VersionInfo[];
   current: FlowConfig;
   onRepublished: () => void;
 }) {
@@ -73,6 +75,7 @@ export function Versions({
   const [against, setAgainst] = useState<'current' | number>('current');
   const [other, setOther] = useState<FlowConfig | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [republish, setRepublish] = useState<VersionInfo | null>(null);
 
   const load = async (v: number) => {
     setMsg(null);
@@ -83,58 +86,70 @@ export function Versions({
       setMsg({ kind: 'error', text: errMsg(e) });
     }
   };
+  const action = async (v: VersionInfo, a: 'cancel' | 'restore') => {
+    const text =
+      a === 'cancel'
+        ? `Huỷ hiệu lực v${v.version}? Phiên bản vẫn được lưu trong lịch sử; các kỳ ${range(v)} sẽ dùng phiên bản liền trước.`
+        : `Khôi phục hiệu lực v${v.version} (từ kỳ ${v.effective_from})?`;
+    if (!confirm(text)) return;
+    try {
+      await api.flowVersionAction(flowId, v.version, a);
+      setMsg({ kind: 'ok', text: a === 'cancel' ? `Đã huỷ hiệu lực v${v.version}.` : `Đã khôi phục hiệu lực v${v.version}.` });
+      onRepublished();
+    } catch (e) {
+      setMsg({ kind: 'error', text: errMsg(e) });
+    }
+  };
 
   return (
     <div>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      {!versions.length && <p className="muted">Chưa có phiên bản nào được publish.</p>}
-      <div className="table-wrap">
-      <table className="grid">
-        <thead>
-          <tr>
-            <th>Phiên bản</th>
-            <th>Người publish</th>
-            <th>Lúc</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {versions.map((v, i) => (
-            <tr key={v.version}>
-              <td>
-                v{v.version}
-                {i === 0 ? ' (đang dùng)' : ''}
-              </td>
-              <td>{v.created_by}</td>
-              <td>{new Date(v.created_at).toLocaleString('vi-VN')}</td>
-              <td className="row gap">
-                <button type="button" className="sm" onClick={() => load(v.version)}>
-                  Xem / so sánh
-                </button>
-                {i > 0 && (
-                  <button
-                    type="button"
-                    className="sm"
-                    onClick={async () => {
-                      if (!confirm(`Publish lại v${v.version} thành phiên bản mới (rollback)?`)) return;
-                      try {
-                        const r = await api.publish(flowId, v.version);
-                        setMsg({ kind: 'ok', text: `Đã publish lại v${v.version} thành v${r.version}.` });
-                        onRepublished();
-                      } catch (e) {
-                        setMsg({ kind: 'error', text: errMsg(e) });
-                      }
-                    }}
-                  >
-                    Publish lại
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+      <p className="muted">
+        Mỗi lần publish là một phiên bản mới có hiệu lực từ một kỳ lương. Khi chạy, ứng dụng dùng phiên bản có hiệu lực của kỳ được chọn. Phiên bản cũ không bao giờ bị
+        xoá — có thể huỷ hiệu lực hoặc publish lại thành phiên bản mới.
+      </p>
+      <VersionTable
+        versions={versions}
+        selected={view?.version}
+        actions={(v) => (
+          <>
+            <button type="button" className="sm" onClick={() => load(v.version)}>
+              Xem / so sánh
+            </button>
+            <button type="button" className="sm" onClick={() => setRepublish(v)}>
+              Publish lại
+            </button>
+            {v.state === 'cancelled' ? (
+              <button type="button" className="sm" onClick={() => action(v, 'restore')}>
+                Khôi phục
+              </button>
+            ) : (
+              <button type="button" className="sm danger" onClick={() => action(v, 'cancel')}>
+                Huỷ hiệu lực
+              </button>
+            )}
+          </>
+        )}
+      />
+      {republish && (
+        <EffectiveDialog
+          title={`Publish lại v${republish.version} thành phiên bản mới`}
+          what={`flow ${flowId}`}
+          versions={versions}
+          saveLabel="Publish"
+          onClose={() => setRepublish(null)}
+          onSave={async (effectiveFrom, note) => {
+            try {
+              const r = await api.publish(flowId, { fromVersion: republish.version, effectiveFrom, note: note || `Publish lại từ v${republish.version}` });
+              setRepublish(null);
+              setMsg({ kind: 'ok', text: `Đã publish lại v${republish.version} thành v${r.version}.` });
+              onRepublished();
+            } catch (e) {
+              setMsg({ kind: 'error', text: errMsg(e) });
+            }
+          }}
+        />
+      )}
       {view && (
         <div className="card diff-card">
           <div className="row gap">

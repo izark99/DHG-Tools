@@ -86,10 +86,40 @@ describe('browser end-to-end', () => {
   });
 
   it('master tables are saved and shown', async () => {
-    for (const t of Object.values(masters)) expect((await api('PUT', `/api/masters/${t.name}`, { columns: t.columns, rows: t.rows })).status).toBe(200);
+    for (const t of Object.values(masters))
+      expect((await api('PUT', `/api/masters/${t.name}`, { columns: t.columns, rows: t.rows, effectiveFrom: '2000-01' })).status).toBe(200);
     await page.goto(`${BASE}/#/admin/masters`);
-    await page.getByRole('button', { name: 'CostCenter' }).click();
-    await page.getByText('3 dòng · 6 cột').waitFor();
+    await page.getByRole('button', { name: /^CostCenter/ }).click();
+    await page.getByText(/^3 dòng · 6 cột/).waitFor();
+  });
+
+  it('saving a master table adds a version from a period; older periods keep the old one', async () => {
+    const name = `E2E${RUN}`;
+    expect((await api('PUT', `/api/masters/${name}`, { columns: ['key', 'value'], rows: [['A', 1]], effectiveFrom: '2000-01' })).status).toBe(200);
+    await page.goto(`${BASE}/#/`);
+    await page.goto(`${BASE}/#/admin/masters`);
+    await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+    await page.locator('table.grid.edit tbody tr').first().locator('input.cell').nth(1).fill('2');
+    await page.getByRole('button', { name: 'Lưu phiên bản mới' }).click();
+    await page.getByLabel('Hiệu lực từ tháng').selectOption('1');
+    await page.getByLabel('Hiệu lực từ năm').fill('2027');
+    await page.getByLabel('Ghi chú thay đổi').fill('giá trị mới');
+    // the preview shows how the old version is closed
+    await page.locator('.effect-preview').getByText('v1 sẽ chỉ còn hiệu lực đến 12/2026.').waitFor();
+    await page.locator('.modal').getByRole('button', { name: 'Lưu phiên bản mới' }).click();
+    await page.getByText(/Đã lưu .* v2, hiệu lực từ 01\/2027/).waitFor();
+    await page.locator('table.versions').getByText('giá trị mới').waitFor();
+    const at = async (period: string) =>
+      (await api('GET', `/api/masters?period=${period}`)).json.tables.find((t: { name: string }) => t.name === name) as { version: number; rows: unknown[][] };
+    expect((await at('2026-12')).rows).toEqual([['A', 1]]);
+    expect((await at('2027-01')).rows).toEqual([['A', 2]]);
+    // cancelling v2 brings v1 back for 2027; restoring undoes it; nothing is deleted
+    expect((await api('POST', `/api/masters/${name}/versions/2`, { action: 'cancel' })).status).toBe(200);
+    expect((await at('2027-01')).version).toBe(1);
+    expect((await api('POST', `/api/masters/${name}/versions/2`, { action: 'restore' })).status).toBe(200);
+    expect((await at('2027-01')).version).toBe(2);
+    expect((await api('PUT', `/api/masters/${name}`, { columns: ['key'], rows: [] })).status).toBe(400);
+    expect((await api('DELETE', `/api/masters/${name}`)).status).toBe(200);
   });
 
   it('creates a flow from a JSON file, blocks publishing an invalid formula, then publishes', async () => {
@@ -111,29 +141,56 @@ describe('browser end-to-end', () => {
     // server refuses too
     await page.getByRole('button', { name: 'Lưu nháp' }).click();
     await page.getByText(/Đã lưu nháp. Còn \d+ lỗi/).waitFor();
-    const refused = await api('POST', `/api/flows/${FLOW}/publish`, {});
+    const refused = await api('POST', `/api/flows/${FLOW}/publish`, { effectiveFrom: '2000-01' });
     expect(refused.status).toBe(400);
     expect(JSON.stringify(refused.json)).toContain('FOO');
 
     await f.fill('SUMOF(in.SalaryTable.basic)');
     await page.getByRole('button', { name: 'Publish' }).click();
-    await page.getByText('Đang sửa từ: phiên bản v1 đang dùng').waitFor();
+    // publish asks for the first payroll period; v1 applies from the beginning
+    await page.getByLabel('Hiệu lực từ tháng').selectOption('1');
+    await page.getByLabel('Hiệu lực từ năm').fill('2000');
+    await page.locator('.modal').getByRole('button', { name: 'Publish' }).click();
+    await page.getByText('Đang sửa từ: phiên bản v1 (hiện hành)').waitFor();
   });
 
-  it('versions: publish v2, roll back by re-publishing v1 as v3', async () => {
+  it('versions are effective-dated: each period runs the version in force for it', async () => {
     const v1 = (await api('GET', `/api/flows/${FLOW}/versions/1`)).json.config;
     expect((await api('PUT', `/api/flows/${FLOW}/draft`, { config: { ...v1, fileName: 'X_{MM}.xlsx' } })).status).toBe(200);
-    expect((await api('POST', `/api/flows/${FLOW}/publish`, {})).json.version).toBe(2);
-    expect((await api('POST', `/api/flows/${FLOW}/publish`, { fromVersion: 1 })).json.version).toBe(3);
-    const v3 = (await api('GET', `/api/flows/${FLOW}/versions/3`)).json.config;
-    expect(v3).toEqual(v1);
-    const v2 = (await api('GET', `/api/flows/${FLOW}/versions/2`)).json.config;
-    expect(v2.fileName).toBe('X_{MM}.xlsx');
+    expect((await api('POST', `/api/flows/${FLOW}/publish`, {})).status).toBe(400); // no effective period
+    expect((await api('POST', `/api/flows/${FLOW}/publish`, { effectiveFrom: '2026-12', note: 'tên file mới' })).json.version).toBe(2);
+    // roll back from 2027: v1's config again, as v3
+    expect((await api('POST', `/api/flows/${FLOW}/publish`, { fromVersion: 1, effectiveFrom: '2027-01' })).json.version).toBe(3);
+    const eff = async (period: string) => (await api('GET', `/api/flows/${FLOW}/effective?period=${period}`)).json.effective;
+    expect((await eff('2026-11')).version).toBe(1);
+    expect((await eff('2026-12')).version).toBe(2);
+    expect((await eff('2026-12')).config.fileName).toBe('X_{MM}.xlsx');
+    expect((await eff('2027-01')).version).toBe(3);
+    expect((await eff('2027-01')).config).toEqual(v1);
+    // cancel v2: December falls back to v1; restore it; the version list keeps all three
+    expect((await api('POST', `/api/flows/${FLOW}/versions/2`, { action: 'cancel' })).status).toBe(200);
+    expect((await eff('2026-12')).version).toBe(1);
+    expect((await api('POST', `/api/flows/${FLOW}/versions/2`, { action: 'restore' })).status).toBe(200);
+    expect((await api('GET', `/api/flows/${FLOW}`)).json.versions.map((v: { version: number; state: string }) => `${v.version}:${v.state}`)).toEqual([
+      '3:future',
+      '2:future',
+      '1:current',
+    ]);
+
     await page.goto(`${BASE}/#/`);
     await page.goto(`${BASE}/#/admin/flows/${FLOW}`);
     await page.getByRole('tab', { name: 'Phiên bản' }).click();
-    await page.getByText('v3 (đang dùng)').waitFor();
+    await page.locator('table.versions').getByText('từ đầu → 11/2026').waitFor();
+    await page.locator('table.versions').getByText('tên file mới').waitFor();
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/versions.png`, fullPage: true });
+
+    // the run page follows the period chosen
+    await page.goto(`${BASE}/#/run/${FLOW}`);
+    await page.getByLabel('Năm').fill('2026');
+    await page.getByLabel('Tháng').selectOption('12');
+    await page.getByText('v2 · hiệu lực 12/2026 → 12/2026').first().waitFor();
+    await page.getByLabel('Tháng').selectOption('11');
+    await page.getByText('v1 · hiệu lực từ đầu → 11/2026').first().waitFor();
   });
 
   let ledger1 = '';
@@ -252,7 +309,19 @@ describe('browser end-to-end', () => {
     for (const needle of ['0022', '0101', 'Bình', '10000000', '18000000', '1050000']) expect(bodies.filter((b) => b.includes(needle))).toEqual([]);
     const paths = new Set(requests.filter((r) => r.method !== 'GET').map((r) => new URL(r.url).pathname));
     expect([...paths].sort()).toEqual(
-      ['/api/flows', `/api/flows/${FLOW}/draft`, `/api/flows/${FLOW}/publish`, `/api/ledger-marks/e2e${RUN}`, '/api/login', '/api/masters/CostCenter', '/api/masters/Params', '/api/runs'].sort(),
+      [
+        '/api/flows',
+        `/api/flows/${FLOW}/draft`,
+        `/api/flows/${FLOW}/publish`,
+        `/api/flows/${FLOW}/versions/2`,
+        `/api/ledger-marks/e2e${RUN}`,
+        '/api/login',
+        '/api/masters/CostCenter',
+        '/api/masters/Params',
+        `/api/masters/E2E${RUN}`,
+        `/api/masters/E2E${RUN}/versions/2`,
+        '/api/runs',
+      ].sort(),
     );
   });
 

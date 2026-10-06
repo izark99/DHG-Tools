@@ -2022,6 +2022,134 @@ td.text-cell {
   max-width: 560px;
 }
 
+/* ---------- modal (Twenty: white card, strong shadow, dimmed backdrop) ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.36);
+}
+.modal {
+  width: min(480px, 100%);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-strong);
+}
+.modal.wide {
+  width: min(760px, 100%);
+}
+.modal-head {
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-title {
+  flex: 1;
+  font-weight: 600;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-body > p {
+  margin: 0;
+}
+.modal-foot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+.effect-preview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+.effect-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.effect-preview ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.effect-preview li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+.effect-preview li.new {
+  color: var(--text);
+  font-weight: 500;
+}
+.effect-v {
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+}
+.warn-text {
+  color: var(--warn) !important;
+}
+.period-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.period-picker select {
+  height: 28px !important;
+}
+td.nowrap,
+.nowrap {
+  white-space: nowrap;
+}
+table.grid.versions td {
+  height: auto;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+table.grid.versions td.text-cell {
+  min-width: 180px;
+}
+td.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+td.actions-cell .row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+table.grid tr.selected td {
+  background: var(--accent-bg);
+}
+
 @media (max-width: 1100px) {
   .run-layout {
     grid-template-columns: minmax(0, 1fr);

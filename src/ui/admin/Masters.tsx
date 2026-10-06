@@ -1,71 +1,218 @@
 // Master tables: grid edit, add/delete rows and columns, xlsx import (replace or merge by key) and export.
+// Effective-dated: the page shows the version in force for a chosen period; saving adds a version from
+// a payroll period; the history lists every version (load one into the editor, cancel / restore).
 import { useEffect, useMemo, useState } from 'react';
-import { api, errMsg } from '../../api';
+import { api, errMsg, type MasterVersionData, type VersionInfo } from '../../api';
+import { BEGINNING, currentPeriod, periodLabel } from '../../engine/effective';
 import type { MasterTable, Scalar } from '../../engine/types';
 import { tableToXlsx, xlsxToTable } from '../../excel/masterFile';
 import { Alert, download, useAsync, XLSX_TYPE } from '../common';
-import { Icon, PageHeader } from '../layout';
+import { Icon, PageHeader, toast } from '../layout';
+import { EffectiveDialog, range, StatePill, VersionTable } from './Effective';
 import { Guide, T } from '../texts';
 
 const PAGE = 100;
 
 export function MastersPage() {
-  const list = useAsync(() => api.masters(), []);
+  const [viewPeriod, setViewPeriod] = useState(currentPeriod());
+  const list = useAsync(() => api.masters(viewPeriod), [viewPeriod]);
   const [sel, setSel] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
-  const tables = list.data?.tables ?? [];
-  const current = tables.find((t) => t.name === sel) ?? tables[0] ?? null;
+  /** a version loaded into the editor as the starting point of a new version */
+  const [loaded, setLoaded] = useState<MasterVersionData | null>(null);
+  const catalog = list.data?.catalog ?? [];
+  const name = sel && catalog.some((c) => c.name === sel) ? sel : (catalog[0]?.name ?? null);
+  const atPeriod = list.data?.tables.find((t) => t.name === name) ?? null;
+  const versions = catalog.find((c) => c.name === name)?.versions ?? [];
+  const base = loaded && loaded.name === name ? loaded : atPeriod;
+  const reload = () => {
+    setLoaded(null);
+    list.reload();
+  };
   return (
     <>
-    <PageHeader
-      icon="table"
-      crumb={<T k="nav.group.admin">Quản trị</T>}
-      title={<T k="masters.title">Master data</T>}
-      subtitle={<T k="masters.subtitle">Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value).</T>}
-    />
-    <Guide k="masters.guide" />
-    <section className="split">
-      <aside className="card side">
-        <div className="card-head"><div className="card-title">Bảng master</div></div>
-        <div className="card-body">
-        {list.error && <Alert kind="error">{list.error}</Alert>}
-        <ul className="side-list">
-          {tables.map((t) => (
-            <li key={t.name}>
-              <button type="button" className={t.name === current?.name ? 'side-item active' : 'side-item'} onClick={() => setSel(t.name)}>
-                <Icon name="table" size={16} />
-                <span className="side-name">{t.name}</span>
-                <span className="side-count">{t.rows.length}</span>
+      <PageHeader
+        icon="table"
+        crumb={<T k="nav.group.admin">Quản trị</T>}
+        title={<T k="masters.title">Master data</T>}
+        subtitle={
+          <T k="masters.subtitle">
+            Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value). Mỗi lần lưu tạo phiên bản mới có hiệu lực từ một kỳ.
+          </T>
+        }
+        actions={<PeriodPicker value={viewPeriod} onChange={(p) => (setLoaded(null), setViewPeriod(p))} />}
+      />
+      <Guide k="masters.guide" />
+      <section className="split">
+        <aside className="card side">
+          <div className="card-head">
+            <div className="card-title">Bảng master</div>
+          </div>
+          <div className="card-body">
+            {list.error && <Alert kind="error">{list.error}</Alert>}
+            <ul className="side-list">
+              {catalog.map((c) => {
+                const t = list.data?.tables.find((x) => x.name === c.name);
+                return (
+                  <li key={c.name}>
+                    <button type="button" className={c.name === name ? 'side-item active' : 'side-item'} onClick={() => (setLoaded(null), setSel(c.name))}>
+                      <Icon name="table" size={16} />
+                      <span className="side-name">{c.name}</span>
+                      <span className="side-count" title={t ? `v${t.version}, ${t.rows.length} dòng` : 'Không có phiên bản hiệu lực cho kỳ đang xem'}>
+                        {t ? `v${t.version} · ${t.rows.length}` : '—'}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="row gap">
+              <input placeholder="Tên bảng mới" value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <button
+                type="button"
+                disabled={!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(newName) || catalog.some((t) => t.name === newName)}
+                onClick={async () => {
+                  try {
+                    await api.putMaster({ name: newName, columns: newName === 'Params' ? ['key', 'value'] : ['Key'], rows: [] }, BEGINNING, 'Tạo bảng');
+                    setSel(newName);
+                    setNewName('');
+                    reload();
+                  } catch (e) {
+                    toast('error', errMsg(e));
+                  }
+                }}
+              >
+                Tạo
               </button>
-            </li>
-          ))}
-        </ul>
-        <div className="row gap">
-          <input placeholder="Tên bảng mới" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <button
-            type="button"
-            disabled={!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(newName) || tables.some((t) => t.name === newName)}
-            onClick={async () => {
-              await api.putMaster({ name: newName, columns: newName === 'Params' ? ['key', 'value'] : ['Key'], rows: [] });
-              setSel(newName);
-              setNewName('');
-              list.reload();
-            }}
-          >
-            Tạo
-          </button>
+            </div>
+          </div>
+        </aside>
+        <div className="grow">
+          {name ? (
+            <>
+              <MasterEditor
+                key={`${name}|${base ? `${'cancelled' in base ? 'loaded' : 'at'}-${base.version}` : 'none'}|${viewPeriod}`}
+                name={name}
+                base={base}
+                loadedFrom={loaded && loaded.name === name ? loaded.version : null}
+                viewPeriod={viewPeriod}
+                versions={versions}
+                onSaved={reload}
+                onDeleted={() => (setSel(null), reload())}
+                onDiscardLoaded={() => setLoaded(null)}
+              />
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">Lịch sử phiên bản — {name}</div>
+                </div>
+                <div className="card-body">
+                  <VersionTable
+                    versions={versions}
+                    selected={base?.version}
+                    actions={(v) => (
+                      <>
+                        <button
+                          type="button"
+                          className="sm"
+                          title="Nạp dữ liệu của phiên bản này vào trình sửa để tạo phiên bản mới"
+                          onClick={async () => {
+                            try {
+                              setLoaded(await api.masterVersion(name, v.version));
+                            } catch (e) {
+                              toast('error', errMsg(e));
+                            }
+                          }}
+                        >
+                          Nạp vào trình sửa
+                        </button>
+                        {v.state === 'cancelled' ? (
+                          <button type="button" className="sm" onClick={() => versionAction(name, v, 'restore', reload)}>
+                            Khôi phục
+                          </button>
+                        ) : (
+                          <button type="button" className="sm danger" onClick={() => versionAction(name, v, 'cancel', reload)}>
+                            Huỷ hiệu lực
+                          </button>
+                        )}
+                      </>
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty">Chưa có bảng master nào. Tạo bảng mới ở khung bên trái.</div>
+          )}
         </div>
-        </div>
-      </aside>
-      <div className="grow">{current ? <MasterEditor key={current.name + current.updated_at} table={current} onSaved={list.reload} onDeleted={() => (setSel(null), list.reload())} /> : <div className="empty">Chưa có bảng master nào. Tạo bảng mới ở khung bên trái.</div>}</div>
-    </section>
+      </section>
     </>
   );
 }
 
-function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { updated_by: string | null; updated_at: string | null }; onSaved: () => void; onDeleted: () => void }) {
-  const [cols, setCols] = useState<string[]>(table.columns);
-  const [rows, setRows] = useState<Scalar[][]>(table.rows);
+async function versionAction(name: string, v: VersionInfo, a: 'cancel' | 'restore', done: () => void) {
+  const text =
+    a === 'cancel'
+      ? `Huỷ hiệu lực ${name} v${v.version}? Phiên bản vẫn được lưu trong lịch sử; các kỳ ${range(v)} sẽ dùng phiên bản liền trước.`
+      : `Khôi phục hiệu lực ${name} v${v.version} (từ kỳ ${periodLabel(v.effective_from)})?`;
+  if (!confirm(text)) return;
+  try {
+    await api.masterVersionAction(name, v.version, a);
+    toast('ok', a === 'cancel' ? `Đã huỷ hiệu lực v${v.version}.` : `Đã khôi phục hiệu lực v${v.version}.`);
+    done();
+  } catch (e) {
+    toast('error', errMsg(e));
+  }
+}
+
+/** Month / year picker for "xem theo kỳ" (compact, for a page bar). */
+export function PeriodPicker({ value, onChange }: { value: string; onChange: (p: string) => void }) {
+  const [y, m] = value.split('-').map(Number);
+  const set = (yy: number, mm: number) => onChange(`${yy}-${String(mm).padStart(2, '0')}`);
+  return (
+    <span className="period-picker" title="Xem dữ liệu có hiệu lực ở kỳ này">
+      <span className="muted">Kỳ</span>
+      <select value={m} onChange={(e) => set(y, Number(e.target.value))} aria-label="Xem theo tháng">
+        {Array.from({ length: 12 }, (_, i) => (
+          <option key={i + 1} value={i + 1}>
+            {String(i + 1).padStart(2, '0')}
+          </option>
+        ))}
+      </select>
+      <select value={y} onChange={(e) => set(Number(e.target.value), m)} aria-label="Xem theo năm">
+        {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 6 + i).map((yy) => (
+          <option key={yy} value={yy}>
+            {yy}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
+function MasterEditor({
+  name,
+  base,
+  loadedFrom,
+  viewPeriod,
+  versions,
+  onSaved,
+  onDeleted,
+  onDiscardLoaded,
+}: {
+  name: string;
+  /** the version applying to the period being viewed, or a version loaded from the history */
+  base: (MasterTable & { version: number; effective_from: string; note: string | null; by: string | null; at: string }) | null;
+  loadedFrom: number | null;
+  viewPeriod: string;
+  versions: VersionInfo[];
+  onSaved: () => void;
+  onDeleted: () => void;
+  onDiscardLoaded: () => void;
+}) {
+  const table = { name };
+  const [cols, setCols] = useState<string[]>(base?.columns ?? ['Key']);
+  const [rows, setRows] = useState<Scalar[][]>(base?.rows ?? []);
+  const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(0);
@@ -97,19 +244,25 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
       }),
     );
 
-  const save = async () => {
+  const save = () => {
+    const keys = rows.map((r) => String(r[0] ?? '').trim().toUpperCase()).filter(Boolean);
+    const dup = keys.find((k, i) => keys.indexOf(k) !== i);
+    if (dup) return setMsg({ kind: 'error', text: `Khoá "${dup}" ở cột đầu bị trùng` });
+    setSaving(true);
+  };
+  const doSave = async (effectiveFrom: string, note: string) => {
     try {
-      const keys = rows.map((r) => String(r[0] ?? '').trim().toUpperCase()).filter(Boolean);
-      const dup = keys.find((k, i) => keys.indexOf(k) !== i);
-      if (dup) throw new Error(`Khoá "${dup}" ở cột đầu bị trùng`);
-      await api.putMaster({ name: table.name, columns: cols, rows });
+      const r = await api.putMaster({ name: table.name, columns: cols, rows }, effectiveFrom, note);
+      setSaving(false);
       setDirty(false);
-      setMsg({ kind: 'ok', text: 'Đã lưu.' });
+      toast('ok', `Đã lưu ${table.name} v${r.version}, hiệu lực từ ${periodLabel(effectiveFrom)}.`);
       onSaved();
     } catch (e) {
+      setSaving(false);
       setMsg({ kind: 'error', text: errMsg(e) });
     }
   };
+  const cur = base ? versions.find((v) => v.version === base.version) : undefined;
 
   const importFile = async (file: File | undefined) => {
     if (!file) return;
@@ -153,15 +306,37 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
       <div className="card-head">
         <div className="card-title">
           {table.name}
+          {base && <span className="pill">v{base.version}</span>}
+          {cur && <StatePill state={cur.state} />}
           <span className="muted small">
-            {rows.length} dòng · {cols.length} cột{table.updated_at ? ` · sửa lần cuối ${table.updated_by}, ${new Date(table.updated_at).toLocaleString('vi-VN')}` : ''}
+            {rows.length} dòng · {cols.length} cột
+            {cur && cur.state !== 'superseded' && cur.state !== 'cancelled' ? ` · hiệu lực ${range(cur)}` : ''}
+            {base ? ` · ${base.by ?? ''}, ${new Date(base.at).toLocaleString('vi-VN')}` : ''}
           </span>
         </div>
       </div>
       <div className="card-body">
+      {loadedFrom !== null && (
+        <Alert kind="info">
+          Đang sửa từ dữ liệu của v{loadedFrom}. Lưu sẽ tạo phiên bản mới; v{loadedFrom} giữ nguyên.{' '}
+          <button type="button" className="link" onClick={onDiscardLoaded}>
+            Quay về bản của kỳ đang xem
+          </button>
+        </Alert>
+      )}
+      {!base && <Alert kind="warning">Kỳ {periodLabel(viewPeriod)} không có phiên bản nào của bảng này có hiệu lực. Lưu sẽ tạo phiên bản mới.</Alert>}
+      {saving && (
+        <EffectiveDialog
+          title={`Lưu ${table.name} thành phiên bản mới`}
+          what={`bảng ${table.name}`}
+          versions={versions}
+          onClose={() => setSaving(false)}
+          onSave={doSave}
+        />
+      )}
       <div className="toolbar">
         <button type="button" className="primary" disabled={!dirty} onClick={save}>
-          Lưu
+          Lưu phiên bản mới
         </button>
         <button type="button" onClick={async () => download(await tableToXlsx({ name: table.name, columns: cols, rows }), `${table.name}.xlsx`, XLSX_TYPE)}>
           Xuất xlsx
@@ -178,7 +353,8 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
           type="button"
           className="danger"
           onClick={async () => {
-            if (!confirm(`Xoá bảng ${table.name}? Flow nào dùng bảng này sẽ không chạy được.`)) return;
+            if (!confirm(`Xoá bảng ${table.name} cùng TOÀN BỘ ${versions.length} phiên bản? Không khôi phục được. Flow nào dùng bảng này sẽ không chạy được.`)) return;
+            if (prompt(`Gõ tên bảng (${table.name}) để xác nhận xoá`) !== table.name) return;
             await api.deleteMaster(table.name);
             onDeleted();
           }}

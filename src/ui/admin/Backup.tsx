@@ -45,9 +45,9 @@ export function BackupPage() {
               if (!f) return;
               try {
                 const data = JSON.parse(await f.text());
-                if (!confirm('Nhập backup: bảng master cùng tên sẽ bị THAY THẾ; cấu hình mỗi flow được nạp thành BẢN NHÁP (cần publish). Tiếp tục?')) return;
+                if (!confirm('Nhập backup: bảng master được THÊM phiên bản (không xoá phiên bản cũ); cấu hình mỗi flow được nạp thành BẢN NHÁP (cần publish). Tiếp tục?')) return;
                 const r = await api.importBackup(data);
-                setMsg({ kind: 'ok', text: `Đã nhập ${r.masters} bảng master, ${r.flows} flow (dạng bản nháp) và ${r.texts} văn bản giao diện.` });
+                setMsg({ kind: 'ok', text: `Đã nhập ${r.masters} bảng master (${r.masterVersions} phiên bản mới — phiên bản trùng nội dung được bỏ qua), ${r.flows} flow (dạng bản nháp, cần publish kèm kỳ hiệu lực) và ${r.texts} văn bản giao diện.` });
               } catch (e2) {
                 setMsg({ kind: 'error', text: errMsg(e2) });
               }
@@ -56,7 +56,7 @@ export function BackupPage() {
         </label>
       </div>
       <p className="hint">
-        <T k="backup.hint">Nhập backup: bảng master và văn bản giao diện cùng tên bị thay thế; cấu hình mỗi flow được nạp thành bản nháp và cần publish lại.</T>
+        <T k="backup.hint">Nhập backup: bảng master được thêm phiên bản (giữ nguyên lịch sử, bỏ qua phiên bản trùng nội dung); văn bản giao diện cùng tên bị thay thế; cấu hình mỗi flow được nạp thành bản nháp và cần publish kèm kỳ hiệu lực.</T>
       </p>
       </Card>
     </>

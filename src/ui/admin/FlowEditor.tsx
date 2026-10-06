@@ -1,6 +1,7 @@
 // Flow editor: tabs per config section. Save draft → Test run (wizard on the draft) → Publish.
 import { useEffect, useMemo, useState } from 'react';
-import { api, ApiError, errMsg, type User } from '../../api';
+import { api, ApiError, errMsg, type User, type VersionInfo } from '../../api';
+import { periodLabel } from '../../engine/effective';
 import { scopeFor, type FormulaSite } from '../../engine/scopes';
 import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FooterBlock, FormColumn, FormDef, InputDef, InputField, MasterTable, RunParamDef, SignatureRole } from '../../engine/types';
 import { contextFromMasters, validateConfig, type ConfigError } from '../../engine/validate';
@@ -11,6 +12,7 @@ import { blankConfig } from './blank';
 import { FormulaInput } from './FormulaInput';
 import { FieldInput, ListEditor } from './ListEditor';
 import { Versions } from './Versions';
+import { EffectiveDialog, range } from './Effective';
 
 type Tab = 'errors' | 'general' | 'inputs' | 'params' | 'employee' | 'cost' | 'agg' | 'form02' | 'form03' | 'checks' | 'extra' | 'json' | 'versions' | 'test';
 
@@ -26,10 +28,11 @@ export function FlowEditorPage({ flowId, user }: { flowId: string; user: User })
     (async () => {
       try {
         if (d.draft) return setBase({ config: d.draft.config, from: `bản nháp (${d.draft.by}, ${new Date(d.draft.at).toLocaleString('vi-VN')})` });
-        const latest = d.versions[0];
+        // start from the version in force now (or the newest one still in effect)
+        const latest = d.versions.find((v) => v.state === 'current') ?? d.versions.find((v) => v.state !== 'cancelled' && v.state !== 'superseded');
         if (latest) {
           const v = await api.version(flowId, latest.version);
-          return setBase({ config: v.config, from: `phiên bản v${v.version} đang dùng` });
+          return setBase({ config: v.config, from: `phiên bản v${v.version} (${latest.state === 'current' ? 'hiện hành' : 'hiệu lực ' + range(latest)})` });
         }
         setBase({ config: blankConfig(flowId, d.flow.name), from: 'cấu hình trống' });
       } catch (e) {
@@ -72,7 +75,7 @@ function Editor({
   from: string;
   flowId: string;
   masters: MasterTable[];
-  versions: { version: number; created_by: string; created_at: string }[];
+  versions: VersionInfo[];
   hasDraft: boolean;
   user: User;
   reload: () => void;
@@ -116,15 +119,20 @@ function Editor({
       return false;
     }
   };
-  const publish = async () => {
+  const [publishing, setPublishing] = useState(false);
+  const publish = () => {
     if (errors.length) return setMsg({ kind: 'error', text: 'Còn lỗi cấu hình, chưa thể publish.', errors });
-    if (!confirm('Publish bản nháp thành phiên bản mới? Người dùng sẽ chạy theo phiên bản này ngay.')) return;
+    setPublishing(true);
+  };
+  const doPublish = async (effectiveFrom: string, note: string) => {
     if (dirty && !(await saveDraft())) return;
     try {
-      const r = await api.publish(flowId);
-      setMsg({ kind: 'ok', text: `Đã publish phiên bản v${r.version}.` });
+      const r = await api.publish(flowId, { effectiveFrom, note });
+      setPublishing(false);
+      setMsg({ kind: 'ok', text: `Đã publish phiên bản v${r.version}, hiệu lực từ ${periodLabel(effectiveFrom)}.` });
       reload();
     } catch (e) {
+      setPublishing(false);
       setMsg({ kind: 'error', text: errMsg(e), errors: e instanceof ApiError ? e.errors : undefined });
     }
   };
@@ -193,6 +201,16 @@ function Editor({
           </>
         }
       />
+      {publishing && (
+        <EffectiveDialog
+          title={dirty ? 'Lưu nháp và publish phiên bản mới' : 'Publish phiên bản mới'}
+          what={`flow ${flowId}`}
+          versions={versions}
+          saveLabel="Publish"
+          onClose={() => setPublishing(false)}
+          onSave={doPublish}
+        />
+      )}
       <div className="editor-layout">
       <div className="editor-nav">
         <Tabs tabs={tabs} value={tab} onChange={setTab} vertical />
@@ -451,7 +469,7 @@ function Editor({
           <button type="button" onClick={() => setTestNo((n) => n + 1)}>
             Nạp lại cấu hình vào màn hình chạy thử
           </button>
-          <RunWizard key={testNo} config={cfg} version={null} masters={masters} user={user} testMode embedded />
+          <RunWizard key={testNo} config={cfg} user={user} testMode embedded />
         </div>
       )}
       </div>

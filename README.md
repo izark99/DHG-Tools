@@ -39,7 +39,7 @@ Cookie phiên có cờ `Secure`; Chromium chấp nhận cookie này trên `127.0
 ```bash
 npx wrangler login
 npx wrangler d1 create cb-forms              # chép database_id vào wrangler.toml
-npx wrangler d1 migrations apply cb-forms --remote   # chạy lại mỗi khi có migration mới (vd. 0002_ui_texts)
+npx wrangler d1 migrations apply cb-forms --remote   # chạy lại mỗi khi có migration mới (0002 văn bản giao diện, 0003 hiệu lực theo kỳ)
 npx wrangler pages project create cb-forms
 npm run build && npx wrangler pages deploy dist
 ```
@@ -70,16 +70,24 @@ ADMIN_PASSWORD=... npm run test:e2e        # Chromium: tạo/publish/rollback fl
    có cột Dept / Cost Center / Sector và các cột Budget), `Params` (`key`, `value`) cho tỷ lệ, lương cơ sở…
 2. **Admin** tạo flow trong **Flows** → sửa các tab (Inputs, Tham số chạy, Bảng nhân viên, Cost items, Tổng hợp,
    Form 02/03, Kiểm tra, Sheet thêm) → **Lưu nháp** → **Chạy thử** → **Publish**. Config còn lỗi công thức
-   không publish được. Rollback = publish lại phiên bản cũ (tab Phiên bản).
+   không publish được; publish hỏi kỳ bắt đầu hiệu lực (xem mục 4). Rollback = publish lại phiên bản cũ.
 3. **User** chọn flow → nhập kỳ, tham số → tải file lương (+ file ledger mới nhất) → **Tính** → xem lỗi/kiểm tra,
    preview → **Tải Form + Ledger** (một thao tác tải cả hai file). Lưu file ledger mới vào thư mục chung;
    lần chạy sau app so hash và cảnh báo nếu dùng file cũ.
-4. **Admin** sửa tiêu đề, mô tả, hướng dẫn ngay trên giao diện: bấm nút bút chì ở góc dưới sidebar (hoặc
+4. **Hiệu lực theo kỳ (version)**: flow và master data đều có phiên bản. Publish flow hoặc lưu bảng master luôn
+   tạo **phiên bản mới** với kỳ bắt đầu hiệu lực (tháng/năm) và ghi chú; phiên bản trước tự kết thúc ở kỳ liền
+   trước, không phiên bản nào bị sửa hay xoá. Khi chạy, ứng dụng lấy phiên bản flow và từng bảng master **có hiệu
+   lực cho kỳ được chọn** (chạy lại kỳ cũ → ra đúng số cũ); nhật ký chạy ghi lại các phiên bản đã dùng. Tab
+   **Phiên bản** (flow) và **Lịch sử phiên bản** (master) hiển thị hiệu lực từ → đến, trạng thái (Hiện hành / Sắp
+   áp dụng / Đã hết hiệu lực / Bị thay thế / Đã huỷ hiệu lực); có thể **huỷ hiệu lực** (vẫn lưu lịch sử), **khôi
+   phục**, **publish lại** bản cũ hoặc **nạp bản cũ vào trình sửa** để tạo bản mới. Dữ liệu có trước khi nâng cấp
+   được giữ thành phiên bản "từ đầu".
+5. **Admin** sửa tiêu đề, mô tả, hướng dẫn ngay trên giao diện: bấm nút bút chì ở góc dưới sidebar (hoặc
    **Quản trị › Giao diện**). Chữ có viền nét đứt là sửa được: bấm vào, sửa, **Lưu** (áp dụng cho mọi người
    ngay). Mỗi trang có khung **Hướng dẫn** (chỉ hiện khi có nội dung); trang chạy flow có hướng dẫn chung và
    hướng dẫn riêng từng flow. Trang **Giao diện** liệt kê văn bản đã sửa, khôi phục mặc định, và cho sửa chữ
    của trang đăng nhập qua bản xem trước. Văn bản giao diện nằm trong file backup.
-5. **Giao diện** theo phong cách Twenty (twentyhq/twenty): font Inter, icon Tabler, xám trung tính + nhấn
+6. **Giao diện** theo phong cách Twenty (twentyhq/twenty): font Inter, icon Tabler, xám trung tính + nhấn
    indigo. Chế độ **sáng / tối / theo hệ thống**: nút ở góc dưới sidebar (và góc trên trang đăng nhập), hoặc
    **Tài khoản › Giao diện hiển thị**. Lựa chọn lưu trên trình duyệt đang dùng, không lưu lên server.
 

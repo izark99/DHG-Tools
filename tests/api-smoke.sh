@@ -29,6 +29,10 @@ c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application
 c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -H "Cookie: $A" --data '{}' "$B/api/logout")
 [ "$c" = 403 ] && ok "POST with foreign Origin → 403" || ko "csrf2" "$c"
 
+c=$(post /api/masters/SmokeT '{"columns":["key"],"rows":[]}' "$A" PUT); [ "$c" = 400 ] && ok "master save needs an effective period" || ko "master no period" "$c"
+c=$(post /api/masters/SmokeT '{"columns":["key"],"rows":[["a"]],"effectiveFrom":"2026-07"}' "$A" PUT); [ "$c" = 200 ] && grep -q '"version":1' /tmp/b.$$ && ok "master save adds version 1" || ko "master v1" "$c $(cat /tmp/b.$$)"
+c=$(post /api/masters/SmokeT '' "$A" DELETE); [ "$c" = 200 ] && ok "admin deletes a table" || ko "delete table" "$c"
+
 N="u$RANDOM$RANDOM"
 c=$(post /api/users "{\"username\":\"$N\",\"display_name\":\"Test\",\"role\":\"user\",\"password\":\"TempPass1234\"}" "$A")
 [ "$c" = 201 ] && ok "admin creates user $N" || ko "create user" "$c $(cat /tmp/b.$$)"
@@ -44,7 +48,10 @@ X=$X2
 c=$(get /api/flows "$X"); [ "$c" = 200 ] && ok "user reads flows" || ko "user flows" "$c"
 c=$(get /api/users "$X"); [ "$c" = 403 ] && ok "user → admin GET /api/users 403" || ko "user admin get" "$c"
 c=$(post /api/users '{"username":"zzz","password":"xxxxxxxxxxxx"}' "$X"); [ "$c" = 403 ] && ok "user → admin POST /api/users 403" || ko "user admin post" "$c"
-c=$(post /api/masters/Params '{"columns":["key","value"],"rows":[]}' "$X" PUT); [ "$c" = 403 ] && ok "user → PUT master 403" || ko "user put master" "$c"
+c=$(post /api/masters/Params '{"columns":["key","value"],"rows":[],"effectiveFrom":"2026-01"}' "$X" PUT); [ "$c" = 403 ] && ok "user → PUT master 403" || ko "user put master" "$c"
+c=$(post /api/masters/Params/versions/1 '{"action":"cancel"}' "$X"); [ "$c" = 403 ] && ok "user → cancel master version 403" || ko "user cancel master version" "$c"
+c=$(post /api/flows/X1/versions/1 '{"action":"cancel"}' "$X"); [ "$c" = 403 ] && ok "user → cancel flow version 403" || ko "user cancel flow version" "$c"
+c=$(get "/api/masters?period=2026-13" "$X"); [ "$c" = 400 ] && ok "invalid period rejected" || ko "invalid period" "$c"
 c=$(get /api/backup "$X"); [ "$c" = 403 ] && ok "user → backup 403" || ko "user backup" "$c"
 c=$(post /api/flows '{"id":"X1","name":"x"}' "$X"); [ "$c" = 403 ] && ok "user → create flow 403" || ko "user create flow" "$c"
 

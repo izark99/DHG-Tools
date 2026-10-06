@@ -1,41 +1,52 @@
+import { currentPeriod, effectiveAt } from '../../../src/engine/effective';
 import { body, error, json, now, requireAdmin, requireUser, route, type Handler } from '../../_lib/http';
-import { cleanConfig, FLOW_ID } from '../../_lib/flows';
+import { cleanConfig, FLOW_ID, flowVersionInfo, publishedMeta } from '../../_lib/flows';
 
-interface Row {
-  id: string;
-  name: string;
-  sort: number;
-  active: number;
-  version: number | null;
-  config_json: string | null;
-  published_by: string | null;
-  published_at: string | null;
-  has_draft: number;
-}
-
-// GET → flows with their latest published config (users see active flows only).
+// GET → flows with the version in force now (or, if none applies yet, the latest one) and their
+// version list. Users see active flows only. The run page picks the version by period itself.
 export const onRequestGet: Handler = route(async ({ env, data }) => {
   const me = requireUser(data);
   const { results } = await env.DB.prepare(
     `SELECT f.id, f.name, f.sort, f.active,
-            v.version, v.config_json, v.created_by AS published_by, v.created_at AS published_at,
             EXISTS (SELECT 1 FROM flow_versions d WHERE d.flow_id = f.id AND d.status = 'draft') AS has_draft
-     FROM flows f
-     LEFT JOIN flow_versions v ON v.id = (
-       SELECT id FROM flow_versions WHERE flow_id = f.id AND status = 'published' ORDER BY version DESC LIMIT 1)
-     ORDER BY f.sort, f.id`,
-  ).all<Row>();
+     FROM flows f ORDER BY f.sort, f.id`,
+  ).all<{ id: string; name: string; sort: number; active: number; has_draft: number }>();
+  const meta = await publishedMeta(env.DB);
+  const today = currentPeriod();
+  const picks = new Map<string, number>();
+  for (const [id, rows] of meta) {
+    const m = rows.map((r) => ({ version: r.version, effectiveFrom: r.effective_from, cancelled: !!r.cancelled_at, id: r.id }));
+    const p = effectiveAt(m, today) ?? m.filter((x) => !x.cancelled).sort((a, b) => b.version - a.version)[0];
+    if (p) picks.set(id, p.id);
+  }
+  const configs = new Map<number, { config_json: string }>();
+  const ids = [...picks.values()];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const { results: rs } = await env.DB.prepare(`SELECT id, config_json FROM flow_versions WHERE id IN (${chunk.map(() => '?').join(',')})`)
+      .bind(...chunk)
+      .all<{ id: number; config_json: string }>();
+    for (const r of rs) configs.set(r.id, r);
+  }
   const flows = results
     .filter((r) => me.role === 'admin' || r.active)
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      sort: r.sort,
-      active: !!r.active,
-      published: r.version ? { version: r.version, by: r.published_by, at: r.published_at, config: JSON.parse(r.config_json!) } : null,
-      hasDraft: me.role === 'admin' ? !!r.has_draft : undefined,
-    }));
-  return json({ flows });
+    .map((r) => {
+      const rows = meta.get(r.id) ?? [];
+      const versions = flowVersionInfo(rows, today);
+      const pickId = picks.get(r.id);
+      const pickRow = rows.find((x) => x.id === pickId);
+      const info = pickRow ? versions.find((v) => v.version === pickRow.version)! : null;
+      return {
+        id: r.id,
+        name: r.name,
+        sort: r.sort,
+        active: !!r.active,
+        published: info ? { ...info, config: JSON.parse(configs.get(pickId!)!.config_json) } : null,
+        versions,
+        hasDraft: me.role === 'admin' ? !!r.has_draft : undefined,
+      };
+    });
+  return json({ period: today, flows });
 });
 
 // POST {id, name, config} → new flow with a draft (admin).
