@@ -1,7 +1,8 @@
 // Static validation of a flow configuration (PLAN §6: unknown reference, unknown function,
 // wrong arity, circular / forward reference). A flow with errors cannot be published.
 import { analyzeFormula, type ScopeInfo } from './formula/analyze';
-import { ID_PATTERN, ROW_FIELDS, UNIT_FIELDS, type FlowConfig, type FormDef, type MasterTable } from './types';
+import { RESERVED_RUN, scopeFor, type FormulaSite } from './scopes';
+import { ID_PATTERN, type FlowConfig, type FormDef, type MasterTable } from './types';
 
 export interface ConfigError {
   path: string;
@@ -25,8 +26,6 @@ export function contextFromMasters(masters: Record<string, MasterTable> | Master
     params: p ? p.rows.map((r) => String(r[0] ?? '').trim()).filter(Boolean) : [],
   };
 }
-
-const RESERVED_RUN = ['month', 'year'];
 
 export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): ConfigError[] {
   const errs: ConfigError[] = [];
@@ -83,7 +82,7 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
   });
   const run = [...RESERVED_RUN, ...cfg.runParams.map((p) => p.id)];
 
-  const base = { inputs, params: vctx.params, run, tables: vctx.tables };
+  const at = (site: FormulaSite): ScopeInfo => scopeFor(cfg, vctx, site);
   const check = (path: string, formula: string | null | undefined, info: ScopeInfo, required = true) => {
     if (formula === null || formula === undefined || !String(formula).trim()) {
       if (required) err(path, 'Thiếu công thức');
@@ -98,14 +97,9 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
   const empCols = et.columns.map((c) => c.id);
   dupCheck(empCols, 'employeeTable.columns', 'Cột');
   et.columns.forEach((c, i) => {
-    check(`employeeTable.columns[${i}] (${c.id})`, c.formula, {
-      ...base,
-      scope: 'employee',
-      columns: empCols.slice(0, i),
-      allColumns: empCols,
-    });
+    check(`employeeTable.columns[${i}] (${c.id})`, c.formula, at({ kind: 'employeeColumn', index: i }));
   });
-  check('employeeTable.rowFilter', et.rowFilter, { ...base, scope: 'employee', columns: empCols, allColumns: empCols }, false);
+  check('employeeTable.rowFilter', et.rowFilter, at({ kind: 'employeeFilter' }), false);
 
   // cost items
   const seen = new Set<string>();
@@ -134,21 +128,16 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
       for (const k of ['deptColumn', 'costCenterColumn', 'sectorColumn'] as const)
         if (!cc.includes(agg[k])) err(`aggregation.${k}`, `Bảng "${agg.costCenterTable}" không có cột "${agg[k]}"`);
   }
-  check('aggregation.unitFilter', agg.unitFilter, { ...base, scope: 'unit', columns: [], rowFields: [...UNIT_FIELDS] }, false);
+  check('aggregation.unitFilter', agg.unitFilter, at({ kind: 'unitFilter' }), false);
   if (!agg.descriptionTemplate) err('aggregation.descriptionTemplate', 'Thiếu mẫu diễn giải');
 
   // forms
-  const formCols: Record<string, string[]> = {};
   const checkForm = (id: 'form02' | 'form03', f: FormDef) => {
     const cols = (f.columns ?? []).map((c) => c.id);
-    formCols[id === 'form02' ? 'f02' : 'f03'] = cols;
     if (!f.enabled) return;
     dupCheck(cols, `forms.${id}.columns`, 'Cột');
-    const rowInfo = { ...base, rowFields: [...ROW_FIELDS], empColumns: empCols };
-    check(`forms.${id}.rowFilter`, f.rowFilter, { ...rowInfo, scope: 'form', columns: [] }, false);
-    f.columns.forEach((c, i) =>
-      check(`forms.${id}.columns[${i}] (${c.id})`, c.formula, { ...rowInfo, scope: 'form', columns: cols.slice(0, i), allColumns: cols }),
-    );
+    check(`forms.${id}.rowFilter`, f.rowFilter, at({ kind: 'formRowFilter', form: id }), false);
+    f.columns.forEach((c, i) => check(`forms.${id}.columns[${i}] (${c.id})`, c.formula, at({ kind: 'formColumn', form: id, index: i })));
     const feed = f.ledgerFeed;
     if (!feed || !['accrual', 'actual', 'none'].includes(feed.sheet)) err(`forms.${id}.ledgerFeed`, 'ledgerFeed.sheet phải là accrual / actual / none');
     else if (feed.sheet !== 'none') {
@@ -170,30 +159,14 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
     const p = `checks[${i}] (${c.id})`;
     if (!['error', 'warning'].includes(c.level)) err(p, 'Mức phải là error / warning');
     if (!c.message) err(p, 'Thiếu thông báo');
-    switch (c.scope) {
-      case 'employee':
-        check(p, c.formula, { ...base, scope: 'employee', columns: empCols, allColumns: empCols });
-        break;
-      case 'form02':
-      case 'form03': {
-        const cols = (cfg.forms[c.scope].columns ?? []).map((x) => x.id);
-        check(p, c.formula, { ...base, scope: 'form', columns: cols, rowFields: [...ROW_FIELDS], empColumns: empCols });
-        break;
-      }
-      case 'total':
-        check(p, c.formula, { ...base, scope: 'total', columns: [], empColumns: empCols, formColumns: formCols });
-        break;
-      default:
-        err(p, 'Phạm vi phải là employee / form02 / form03 / total');
-    }
+    if (!['employee', 'form02', 'form03', 'total'].includes(c.scope)) err(p, 'Phạm vi phải là employee / form02 / form03 / total');
+    else check(p, c.formula, at({ kind: 'check', scope: c.scope }));
   });
 
   // extra sheets
   (cfg.extraSheets ?? []).forEach((s, i) =>
     s.rows.forEach((r, ri) =>
-      r.cells.forEach((cell, ci) =>
-        check(`extraSheets[${i}] (${s.name}) dòng ${ri + 1} cột ${ci + 1}`, cell, { ...base, scope: 'total', columns: [], empColumns: empCols, formColumns: formCols }, false),
-      ),
+      r.cells.forEach((cell, ci) => check(`extraSheets[${i}] (${s.name}) dòng ${ri + 1} cột ${ci + 1}`, cell, at({ kind: 'extraCell' }), false)),
     ),
   );
 
