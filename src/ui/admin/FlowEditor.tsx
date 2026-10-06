@@ -156,11 +156,8 @@ function Editor({
   return (
     <>
       <PageHeader
-        crumb={
-          <>
-            <a href="#/admin/flows">Flows</a> <Icon name="chevron" size={12} /> {flowId}
-          </>
-        }
+        icon="flow"
+        crumb={<a href="#/admin/flows">Flows</a>}
         title={cfg.name || flowId}
         subtitle={
           <span className="editor-status">

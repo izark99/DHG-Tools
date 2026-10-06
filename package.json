@@ -18,6 +18,8 @@
     "seed:masters": "python3 -I scripts/seed/extract_masters.py reference/wb reference/out/masters.json"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@tabler/icons-react": "^3.49.0",
     "exceljs": "^4.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

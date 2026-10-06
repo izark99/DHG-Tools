@@ -203,7 +203,7 @@ describe('browser end-to-end', () => {
     let ref = '';
     for (let i = 0; i < n; i++) {
       await page.locator('.tabs .tab').nth(i).click();
-      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => document.querySelector('.content')!.scrollTo(0, 0));
       const now = JSON.stringify([await boxes('.page-header'), await boxes('.tabs'), await boxes('.tabs .tab'), await boxes('.tab-panel')].map((b, k) => (k === 3 ? b.map((x) => x.split(',').slice(0, 3).join(',')) : b)));
       if (i === 0) ref = now;
       expect(now, `editor tab #${i}`).toBe(ref);
@@ -221,11 +221,13 @@ describe('browser end-to-end', () => {
     await page.getByText('Kết quả — kỳ 2026-11').waitFor();
     const rtabs = page.locator('.result-card .tabs .tab');
     await rtabs.first().scrollIntoViewIfNeeded();
-    const scrollY = await page.evaluate(() => window.scrollY);
+    // the page body scrolls inside the page card (.content), not the window
+    const scrollTop = () => page.evaluate(() => document.querySelector('.content')!.scrollTop);
+    const scrollY = await scrollTop();
     let rref = '';
     for (let i = 0; i < (await rtabs.count()); i++) {
       await rtabs.nth(i).click();
-      expect(await page.evaluate(() => window.scrollY), `scroll on result tab #${i}`).toBe(scrollY);
+      expect(await scrollTop(), `scroll on result tab #${i}`).toBe(scrollY);
       const now = JSON.stringify([await boxes('.result-card .tabs'), await boxes('.result-card .tabs .tab'), await boxes('.run-side .card')]);
       if (i === 0) rref = now;
       expect(now, `result tab #${i}`).toBe(rref);
@@ -337,6 +339,23 @@ describe('browser end-to-end', () => {
     await page.goto(`${BASE}/#/`);
     await h1.getByText('Chọn flow để chạy').waitFor();
     expect(await page.locator('.guide').count()).toBe(0);
+  });
+
+  it('light / dark mode: the choice applies at once and survives a reload', async () => {
+    await page.goto(`${BASE}/#/account`);
+    const theme = () => page.evaluate(() => [document.documentElement.getAttribute('data-theme'), getComputedStyle(document.body).backgroundColor]);
+    await page.getByRole('radio', { name: /Tối/ }).click();
+    expect(await theme()).toEqual(['dark', 'rgb(25, 25, 25)']);
+    await page.reload();
+    await page.locator('.theme-picker').waitFor();
+    expect(await theme()).toEqual(['dark', 'rgb(25, 25, 25)']);
+    await page.getByRole('radio', { name: /Sáng/ }).click();
+    expect(await theme()).toEqual(['light', 'rgb(249, 249, 249)']);
+    // the sidebar button cycles light → dark → system
+    await page.getByRole('button', { name: /Chế độ màu/ }).click();
+    expect((await theme())[0]).toBe('dark');
+    await page.getByRole('button', { name: /Chế độ màu/ }).click();
+    expect((await theme())[0]).toBeNull();
   });
 
   it('no CSP violation or page error happened', () => {

@@ -2,7 +2,7 @@
 // the login page is previewed so its texts can be edited too; saved overrides are listed with a reset.
 import { useState } from 'react';
 import { errMsg } from '../../api';
-import { LoginBrand, LoginHead } from '../Auth';
+import { LoginBrand, LoginHead, LoginPoints } from '../Auth';
 import { Card, Icon, PageHeader, toast } from '../layout';
 import { Guide, resetText, setEditMode, T, useEditMode, useSavedTexts } from '../texts';
 
@@ -26,6 +26,7 @@ export function TextsPage() {
   return (
     <>
       <PageHeader
+        icon="pen"
         crumb={<T k="nav.group.admin">Quản trị</T>}
         title={<T k="texts.title">Giao diện</T>}
         subtitle={<T k="texts.subtitle">Sửa tiêu đề, mô tả và hướng dẫn hiển thị cho người dùng. Thay đổi áp dụng ngay cho mọi người.</T>}
@@ -47,9 +48,12 @@ export function TextsPage() {
 
       <Card title="Trang đăng nhập (xem trước)">
         <div className="login-preview">
-          <LoginBrand />
-          <div className="login-preview-form">
-            <LoginHead />
+          <div className="auth-modal">
+            <LoginBrand />
+            <div className="auth-card">
+              <LoginHead />
+            </div>
+            <LoginPoints />
           </div>
         </div>
         {!on && <p className="hint">Bật chế độ chỉnh sửa để sửa trực tiếp trên bản xem trước.</p>}

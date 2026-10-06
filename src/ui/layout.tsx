@@ -1,49 +1,122 @@
 // Shell building blocks: icons, page header, cards, toasts.
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { nextTheme, setThemePref, THEME_ICON, THEME_LABEL, useThemePref } from './theme';
+import {
+  IconAlertTriangle,
+  IconArchive,
+  IconCalculator,
+  IconCheck,
+  IconChevronRight,
+  IconDeviceDesktop,
+  IconDeviceFloppy,
+  IconDownload,
+  IconFileText,
+  IconHierarchy2,
+  IconHistory,
+  IconHome,
+  IconInfoCircle,
+  IconKey,
+  IconLogout,
+  IconMoon,
+  IconPencil,
+  IconPlayerPlay,
+  IconPlus,
+  IconRocket,
+  IconShieldLock,
+  IconSun,
+  IconTable,
+  IconUpload,
+  IconUser,
+  IconUsers,
+  IconX,
+  type Icon as TablerIcon,
+} from '@tabler/icons-react';
 
-const PATHS: Record<string, string> = {
-  home: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
-  play: 'M7 4.5v15l12-7.5z',
-  flow: 'M4 6h6v4H4zM14 14h6v4h-6zM7 10v4h10M17 10V6h-3',
-  table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
-  users: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8',
-  archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
-  logout: 'M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3',
-  key: 'M15 7a4 4 0 1 1-3.5 6L4 20v-3h3v-3h3l1.5-1.5A4 4 0 0 1 15 7z',
-  file: 'M6 3h8l5 5v13H6zM14 3v5h5',
-  upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
-  download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
-  check: 'M5 12.5 10 17 19 7',
-  alert: 'M12 4 2.5 20h19zM12 10v4M12 17.5v.5',
-  calc: 'M6 3h12v18H6zM9 7h6M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01',
-  save: 'M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6',
-  rocket: 'M5 15c-1 1-1.5 3.5-1.5 5.5 2 0 4.5-.5 5.5-1.5M9 15l-3-3c2-5 6-8 13-8 0 7-3 11-8 13zM15 9.5a1 1 0 1 0 0-.01',
-  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
-  plus: 'M12 5v14M5 12h14',
-  chevron: 'M9 6l6 6-6 6',
-  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5v.5',
-  x: 'M6 6l12 12M18 6 6 18',
-  pen: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+// Tabler icons, as in Twenty (16px, light stroke).
+const ICONS: Record<string, TablerIcon> = {
+  home: IconHome,
+  play: IconPlayerPlay,
+  flow: IconHierarchy2,
+  table: IconTable,
+  users: IconUsers,
+  user: IconUser,
+  archive: IconArchive,
+  logout: IconLogout,
+  key: IconKey,
+  shield: IconShieldLock,
+  file: IconFileText,
+  upload: IconUpload,
+  download: IconDownload,
+  check: IconCheck,
+  alert: IconAlertTriangle,
+  calc: IconCalculator,
+  save: IconDeviceFloppy,
+  rocket: IconRocket,
+  history: IconHistory,
+  plus: IconPlus,
+  chevron: IconChevronRight,
+  info: IconInfoCircle,
+  x: IconX,
+  pen: IconPencil,
+  sun: IconSun,
+  moon: IconMoon,
+  desktop: IconDeviceDesktop,
 };
 
-export function Icon({ name, size = 18 }: { name: keyof typeof PATHS | string; size?: number }) {
+export function Icon({ name, size = 16 }: { name: string; size?: number }) {
+  const C = ICONS[name] ?? IconInfoCircle;
+  return <C className="icon" size={size} stroke={1.6} aria-hidden="true" />;
+}
+
+/** Icon button that cycles the colour theme: system → light → dark. */
+export function ThemeToggle() {
+  const pref = useThemePref();
+  const next = nextTheme(pref);
   return (
-    <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={PATHS[name] ?? PATHS.info} />
-    </svg>
+    <button
+      type="button"
+      className="icon-btn"
+      title={`Giao diện: ${THEME_LABEL[pref]} — bấm để chuyển sang ${THEME_LABEL[next]}`}
+      aria-label={`Chế độ màu: ${THEME_LABEL[pref]}`}
+      onClick={() => setThemePref(next)}
+    >
+      <Icon name={THEME_ICON[pref]} />
+    </button>
   );
 }
 
-export function PageHeader({ title, subtitle, actions, crumb }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; crumb?: ReactNode }) {
-  return (
+/** Id of the fixed bar above the scrolling page body (rendered by the shell). */
+export const PAGE_BAR_ID = 'page-bar';
+
+/**
+ * Page top bar (Twenty style): icon, breadcrumb and title on one fixed-height line, actions on the right.
+ * It is rendered into the shell's bar, outside the scrolling body, so it never scrolls and spans the card.
+ * The subtitle is shown at the top of the page body.
+ */
+export function PageHeader({ title, subtitle, actions, crumb, icon }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; crumb?: ReactNode; icon?: string }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setSlot(document.getElementById(PAGE_BAR_ID)), []);
+  const bar = (
     <div className="page-header">
       <div className="page-title">
-        {crumb && <div className="crumb">{crumb}</div>}
+        {icon && <Icon name={icon} />}
+        {crumb && (
+          <>
+            <span className="crumb">{crumb}</span>
+            <span className="crumb-sep">/</span>
+          </>
+        )}
         <h1>{title}</h1>
-        {subtitle && <div className="page-sub">{subtitle}</div>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>
+  );
+  return (
+    <>
+      {slot ? createPortal(bar, slot) : null}
+      {subtitle && <div className="page-sub">{subtitle}</div>}
+    </>
   );
 }
 

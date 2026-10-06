@@ -15,6 +15,7 @@ export function Home({ user }: { user: User }) {
   return (
     <>
       <PageHeader
+        icon="play"
         crumb={<T k="nav.group.run">Vận hành</T>}
         title={<T k="home.title">Chọn flow để chạy</T>}
         subtitle={
@@ -49,7 +50,7 @@ export function Home({ user }: { user: User }) {
         </div>
         <div className="stat">
           <div className="stat-icon">
-            <Icon name="key" />
+            <Icon name="shield" />
           </div>
           <div>
             <div className="stat-value">0</div>

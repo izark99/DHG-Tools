@@ -30,6 +30,7 @@ export function UsersPage({ me }: { me: User }) {
   return (
     <>
       <PageHeader
+        icon="users"
         crumb={<T k="nav.group.admin">Quản trị</T>}
         title={<T k="users.title">Người dùng</T>}
         subtitle={<T k="users.subtitle">Tạo tài khoản với mật khẩu tạm, phân quyền, đặt lại mật khẩu, khoá tài khoản.</T>}

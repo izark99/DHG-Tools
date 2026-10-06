@@ -39,6 +39,7 @@ export function RunFromFile({ user }: { user: User }) {
       {!config && (
         <>
           <PageHeader
+            icon="file"
             crumb={<T k="nav.group.run">Vận hành</T>}
             title={<T k="runFile.title">Chạy thử từ file JSON</T>}
             subtitle={<T k="runFile.subtitle">Kết quả có hậu tố _TEST, không ghi nhật ký và không cập nhật dấu ledger.</T>}

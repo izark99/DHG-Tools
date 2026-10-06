@@ -9,6 +9,7 @@ export function BackupPage() {
   return (
     <>
       <PageHeader
+        icon="archive"
         crumb={<T k="nav.group.admin">Quản trị</T>}
         title={<T k="backup.title">Backup cấu hình</T>}
         subtitle={<T k="backup.subtitle">File backup gồm toàn bộ flow (mọi phiên bản), bảng master và văn bản giao diện. Không có dữ liệu lương nào.</T>}

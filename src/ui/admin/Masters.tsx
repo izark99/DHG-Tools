@@ -18,6 +18,7 @@ export function MastersPage() {
   return (
     <>
     <PageHeader
+      icon="table"
       crumb={<T k="nav.group.admin">Quản trị</T>}
       title={<T k="masters.title">Master data</T>}
       subtitle={<T k="masters.subtitle">Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value).</T>}

@@ -27,6 +27,7 @@ export function FlowsPage() {
   return (
     <>
       <PageHeader
+        icon="flow"
         crumb={<T k="nav.group.admin">Quản trị</T>}
         title={<T k="flows.title">Flows</T>}
         subtitle={<T k="flows.subtitle">Mỗi flow là một bộ cấu hình: input, công thức, cost item, Form 02/03, kiểm tra. Người dùng luôn chạy phiên bản publish mới nhất.</T>}

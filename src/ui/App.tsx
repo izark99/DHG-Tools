@@ -7,7 +7,7 @@ import { MastersPage } from './admin/Masters';
 import { UsersPage } from './admin/Users';
 import { BackupPage } from './admin/Backup';
 import { TextsPage } from './admin/Texts';
-import { Icon, initials, Toaster } from './layout';
+import { Icon, initials, PAGE_BAR_ID, ThemeToggle, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
 import { EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
@@ -121,6 +121,7 @@ export function App() {
               <span className="user-role">{isAdmin ? 'Quản trị viên' : 'Người dùng'}</span>
             </span>
           </a>
+          <ThemeToggle />
           {isAdmin && (
             <button
               type="button"
@@ -146,8 +147,12 @@ export function App() {
           </button>
         </div>
       </aside>
-      <main className="content">
-        <div className="content-inner">{page}</div>
+      {/* Twenty-style page: a white card beside the sidebar; only its content scrolls */}
+      <main className="page-card">
+        <div id={PAGE_BAR_ID} className="page-bar" />
+        <div className="content">
+          <div className="content-inner">{page}</div>
+        </div>
       </main>
       <Toaster />
       <EditModeBar />

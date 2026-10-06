@@ -79,6 +79,9 @@ ADMIN_PASSWORD=... npm run test:e2e        # Chromium: tạo/publish/rollback fl
    ngay). Mỗi trang có khung **Hướng dẫn** (chỉ hiện khi có nội dung); trang chạy flow có hướng dẫn chung và
    hướng dẫn riêng từng flow. Trang **Giao diện** liệt kê văn bản đã sửa, khôi phục mặc định, và cho sửa chữ
    của trang đăng nhập qua bản xem trước. Văn bản giao diện nằm trong file backup.
+5. **Giao diện** theo phong cách Twenty (twentyhq/twenty): font Inter, icon Tabler, xám trung tính + nhấn
+   indigo. Chế độ **sáng / tối / theo hệ thống**: nút ở góc dưới sidebar (và góc trên trang đăng nhập), hoặc
+   **Tài khoản › Giao diện hiển thị**. Lựa chọn lưu trên trình duyệt đang dùng, không lưu lên server.
 
 ## Ngôn ngữ công thức (tóm tắt)
 

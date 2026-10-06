@@ -271,13 +271,11 @@ export function RunWizard({
   return (
     <>
       {!embedded && <PageHeader
+        icon="play"
         crumb={
-          <>
-            <a href="#/">
-              <T k="nav.run">Chạy flow</T>
-            </a>{' '}
-            <Icon name="chevron" size={12} /> {config.id}
-          </>
+          <a href="#/">
+            <T k="nav.run">Chạy flow</T>
+          </a>
         }
         title={config.name}
         subtitle={
