@@ -42,8 +42,12 @@ export function analyzeFormula(src: string, info: ScopeInfo): Analysis {
     throw e;
   }
 
+  const bound: string[] = [];
   const visit = (n: Node, ctx: 'normal' | 'unitsum') => {
     switch (n.k) {
+      case 'name':
+        if (!bound.includes(n.id)) errors.push(`Tên không xác định "${n.id}"`);
+        return;
       case 'num':
       case 'str':
       case 'bool':
@@ -99,7 +103,19 @@ export function analyzeFormula(src: string, info: ScopeInfo): Analysis {
               errors.push(`LOOKUP: bảng "${t.v}" không có cột "${(n.args[2] as { v: string }).v}"`);
           }
         }
-        const childCtx = n.name === 'UNITSUM' ? 'unitsum' : ctx;
+        const childCtx = n.name === 'UNITSUM' || n.name === 'ROWSUM' ? 'unitsum' : ctx;
+        if (n.name === 'LET') {
+          const before = bound.length;
+          for (let i = 0; i + 1 < n.args.length; i += 2) {
+            const nm = n.args[i];
+            visit(n.args[i + 1], childCtx);
+            if (nm.k === 'name') bound.push(nm.id);
+            else errors.push('LET: tên biến phải là chữ không dấu chấm');
+          }
+          if (n.args.length % 2 === 1) visit(n.args[n.args.length - 1], childCtx);
+          bound.length = before;
+          return;
+        }
         n.args.forEach((x) => visit(x, childCtx));
         return;
       }

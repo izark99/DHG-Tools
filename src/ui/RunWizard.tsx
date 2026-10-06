@@ -334,7 +334,25 @@ export function RunWizard({
               {config.runParams.map((p) => (
                 <label key={p.id} className="field">
                   {fieldLabel(p.label, p.required)}
-                  {p.type === 'master' ? (
+                  {p.type === 'costItem' ? (
+                    <select
+                      value={params[p.id] ?? ''}
+                      onChange={(e) => {
+                        invalidate();
+                        setParams({ ...params, [p.id]: e.target.value });
+                      }}
+                    >
+                      <option value="">— chọn khoản —</option>
+                      {/* the generic item that resolves through helperColumn is not itself a choice */}
+                      {config.costItems
+                        .filter((c) => !c.helperColumn)
+                        .map((c) => (
+                          <option key={c.helper} value={c.helper}>
+                            {c.nameVi} ({c.helper})
+                          </option>
+                        ))}
+                    </select>
+                  ) : p.type === 'master' ? (
                     <select
                       value={params[p.id] ?? ''}
                       onChange={(e) => {

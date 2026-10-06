@@ -87,7 +87,7 @@ describe('formula language', () => {
     expect(() => ev('LOOKUP("T","x","val")')).toThrow(/N\/A/);
   });
   it('rejects unknown names and characters', () => {
-    expect(() => parse('foo + 1')).toThrow();
+    expect(() => ev('foo + 1')).toThrow(/không xác định/);
     expect(() => parse('1 +')).toThrow();
     expect(() => parse('"abc')).toThrow();
     expect(() => parse('1 $ 2')).toThrow();
@@ -113,5 +113,57 @@ describe('analyzer', () => {
     expect(analyzeFormula('IF(row.costCode IN ("1"), UNITSUM(emp.si), 0)', info).errors).toEqual([]);
     expect(analyzeFormula('UNITSUM(emp.nope)', info).errors.length).toBe(1);
     expect(analyzeFormula('emp.si', info).errors.length).toBe(1);
+  });
+});
+
+describe('Excel functions used by the workbook translations', () => {
+  const rows: Record<string, Value> = {
+    'in.D.luong': [100, 200, 300, 400],
+    'in.D.loai': ['Thưởng KPI quý', 'Thưởng Đạt Khoán Quý (+)', 'Lương (+)', 'Thưởng KPI năm'],
+    'in.D.tinh': ['Medical Representative', 'Medical Representative', 'Others', 'Others'],
+  };
+  const e: Env = {
+    column: () => null,
+    ref: (ns, path) => rows[`${ns}.${path.join('.')}`] ?? null,
+    lookup: () => undefined,
+  };
+  const f = (src: string) => evaluate(parse(src), e);
+  it('SUMIFS with wildcard, <> and exact criteria', () => {
+    expect(f('SUMIFS(in.D.luong, in.D.loai, "Thưởng KPI*")')).toBe(500);
+    expect(f('SUMIFS(in.D.luong, in.D.loai, "Thưởng KPI*", in.D.tinh, "Medical Representative")')).toBe(100);
+    expect(f('SUMIFS(in.D.luong, in.D.tinh, "<>" & "Medical Representative")')).toBe(700);
+    expect(f('SUMIFS(in.D.luong, in.D.loai, "thưởng đạt khoán quý (+)")')).toBe(200);
+    expect(f('SUMIFS(in.D.luong, in.D.luong, ">=300")')).toBe(700);
+    expect(f('COUNTIFS(in.D.tinh, "Others")')).toBe(2);
+  });
+  it('text and date helpers', () => {
+    expect(f('SUBSTITUTE("Trích Lương_T09", "Trích", "Chi")')).toBe('Chi Lương_T09');
+    expect(f('TEXTBEFORE("2 * Base Salary", " * ")')).toBe('2');
+    expect(f('TEXTAFTER("Thưởng quý - BU2", "-")')).toBe(' BU2');
+    expect(f('PROPER("hỗ trợ tiền VƯỢT kilomet")')).toBe('Hỗ Trợ Tiền Vượt Kilomet');
+    expect(f('TEXTJOIN(" ", TRUE, "A", "", "B")')).toBe('A B');
+    expect(f('TEXT(MONTH(EOMONTH(DATE(2026,12,1),1)),"00") & "." & YEAR(EOMONTH(DATE(2026,12,1),1))')).toBe('01.2027');
+    expect(f('ISNUMBER(VALUE("2 * Base Salary"))')).toBe(false);
+    expect(f('ISNUMBER(VALUE("1500000"))')).toBe(true);
+    expect(f('ISERROR(1/0)')).toBe(true);
+  });
+});
+
+describe('LET, mixed fractions, case-insensitive lookup column', () => {
+  const e: Env = {
+    column: () => 5_000_000,
+    ref: () => null,
+    lookup: (t, k) => (t === 'S' && String(k) === 'G' ? { Group: 'G', 'Thưởng Thu Tiền Quý': '0 1/6 * Base Salary', Fix: 3000000 } : undefined),
+  };
+  const f = (src: string) => evaluate(parse(src), e);
+  it('evaluates scheme cells that hold a number or "x * Base Salary"', () => {
+    const tpl = (col: string) =>
+      `LET(x, LOOKUP2("S", "G", "${col}"), ROUND(IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, " * ")) * [base]), 0))`;
+    expect(f(tpl('thưởng thu tiền quý'))).toBe(833333);
+    expect(f(tpl('Fix'))).toBe(3000000);
+    expect(f('VALUE("0 1/6")')).toBeCloseTo(1 / 6);
+  });
+  it('rejects unbound names', () => {
+    expect(() => f('x + 1')).toThrow(/không xác định/);
   });
 });

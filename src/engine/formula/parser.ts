@@ -17,7 +17,8 @@ export type Node =
   | { k: 'call'; name: string; args: Node[]; pos: number }
   | { k: 'bin'; op: string; l: Node; r: Node; pos: number }
   | { k: 'un'; op: '-' | '+'; e: Node; pos: number }
-  | { k: 'in'; e: Node; list: Node[]; pos: number };
+  | { k: 'in'; e: Node; list: Node[]; pos: number }
+  | { k: 'name'; id: string; pos: number };
 
 type Tok =
   | { t: 'num'; v: number; pos: number }
@@ -247,7 +248,7 @@ export function parse(src: string): Node {
         if (up === 'TRUE') return { k: 'bool', v: true, pos: t.pos };
         if (up === 'FALSE') return { k: 'bool', v: false, pos: t.pos };
         const parts = t.v.split('.');
-        if (parts.length < 2) throw new FormulaError(`Tên không xác định "${t.v}"`, t.pos);
+        if (parts.length < 2) return { k: 'name', id: t.v.toLowerCase(), pos: t.pos };
         return { k: 'ref', ns: parts[0], path: parts.slice(1), pos: t.pos };
       }
     }

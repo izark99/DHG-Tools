@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError, errMsg, type User } from '../../api';
 import { scopeFor, type FormulaSite } from '../../engine/scopes';
-import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FormColumn, FormDef, InputDef, InputField, MasterTable, RunParamDef, SignatureRole } from '../../engine/types';
+import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FooterBlock, FormColumn, FormDef, InputDef, InputField, MasterTable, RunParamDef, SignatureRole } from '../../engine/types';
 import { contextFromMasters, validateConfig, type ConfigError } from '../../engine/validate';
 import { Alert, download, Tabs, useAsync } from '../common';
 import { Card, Icon, PageHeader, toast } from '../layout';
@@ -259,6 +259,22 @@ function Editor({
                   { key: 'aliases', label: 'Alias tiêu đề', kind: 'aliases', wide: true },
                 ]}
               />
+              <h4>Trường tính trên từng dòng (tuỳ chọn)</h4>
+              <p className="muted small">Tính cho mỗi dòng của input này, ví dụ phân loại dòng lương để SUMIFS. in.{inp.id}.&lt;field&gt; là dòng hiện tại.</p>
+              <ListEditor<NonNullable<InputDef['computed']>[number]>
+                items={inp.computed ?? []}
+                onChange={(computed) => update({ computed })}
+                make={() => ({ id: `calc${(inp.computed ?? []).length + 1}`, formula: '', type: 'text' })}
+                title={(c) => c.id}
+                path={`inputs[${_i}].computed`}
+                errors={errors}
+                fields={[
+                  { key: 'id', label: 'Mã', kind: 'text' },
+                  { key: 'label', label: 'Tên', kind: 'text' },
+                  { key: 'type', label: 'Kiểu', kind: 'select', options: ['text', 'number'] },
+                  { key: 'formula', label: 'Công thức', kind: 'formula', info: () => at({ kind: 'inputComputed' }) },
+                ]}
+              />
             </div>
           )}
         />
@@ -277,7 +293,7 @@ function Editor({
             fields={[
               { key: 'id', label: 'Mã', kind: 'text' },
               { key: 'label', label: 'Nhãn', kind: 'text' },
-              { key: 'type', label: 'Kiểu', kind: 'select', options: ['text', 'number', 'date', 'master'] },
+              { key: 'type', label: 'Kiểu', kind: 'select', options: ['text', 'number', 'date', 'master', 'costItem'] },
               { key: 'table', label: 'Bảng master (kiểu master)', kind: 'select', options: tableNames, nullable: true },
               { key: 'default', label: 'Mặc định', kind: 'text' },
               { key: 'required', label: 'Bắt buộc', kind: 'bool' },
@@ -544,6 +560,7 @@ function FormEditor({
           { key: 'width', label: 'Độ rộng', kind: 'number' },
           { key: 'total', label: 'Cộng ở dòng Total', kind: 'bool', default: true },
           { key: 'hideIfZeroTotal', label: 'Ẩn nếu tổng = 0', kind: 'bool' },
+          { key: 'hidden', label: 'Cột phụ (không in)', kind: 'bool' },
           { key: 'formula', label: 'Công thức', kind: 'formula', info: (_x, i) => at({ kind: 'formColumn', form: id, index: i }) },
         ]}
       />
@@ -567,7 +584,29 @@ function FormEditor({
           <input value={L.titleEn} onChange={(e) => setL({ titleEn: e.target.value })} />
         </label>
         <label className="wide">
-          Dòng thêm dưới tiêu đề (mỗi dòng một dòng, ví dụ "Đơn vị: {'{group}'}")
+          Dòng trước tiêu đề (mỗi dòng một dòng, ví dụ "Đơn vị: {'{group}'}")
+          <textarea rows={2} value={(L.preLines ?? []).join('\n')} onChange={(e) => setL({ preLines: e.target.value.split('\n') })} />
+        </label>
+        <label>
+          Hướng giấy
+          <select value={L.orientation ?? 'landscape'} onChange={(e) => setL({ orientation: e.target.value as 'portrait' | 'landscape' })}>
+            <option value="landscape">Ngang</option>
+            <option value="portrait">Dọc</option>
+          </select>
+        </label>
+        <label>
+          Dòng Total
+          <select value={L.totalPosition ?? 'bottom'} onChange={(e) => setL({ totalPosition: e.target.value as 'top' | 'bottom' })}>
+            <option value="bottom">Dưới bảng</option>
+            <option value="top">Trên tiêu đề cột</option>
+          </select>
+        </label>
+        <label>
+          Nhãn dòng Total
+          <input value={L.totalLabel ?? ''} placeholder="Tổng cộng / Total" onChange={(e) => setL({ totalLabel: e.target.value })} />
+        </label>
+        <label className="wide">
+          Dòng thêm dưới tiêu đề (mỗi dòng một dòng)
           <textarea rows={2} value={(L.extraLines ?? []).join('\n')} onChange={(e) => setL({ extraLines: e.target.value.split('\n') })} />
         </label>
         <label className="wide">
@@ -587,7 +626,38 @@ function FormEditor({
           { key: 'title', label: 'Chức danh VI', kind: 'text' },
           { key: 'titleEn', label: 'Chức danh EN', kind: 'text' },
           { key: 'nameParam', label: 'Tham số chứa tên người ký', kind: 'select', options: runParamIds, nullable: true },
+          { key: 'name', label: 'Tên cố định (nếu không dùng tham số)', kind: 'text' },
         ]}
+      />
+      <h4 className="section-title">Khối dưới chữ ký (soát xét, chữ ký tầng 2…)</h4>
+      <ListEditor<FooterBlock>
+        items={L.footer ?? []}
+        onChange={(footer) => setL({ footer })}
+        title={(b) => (b.kind === 'text' ? `Văn bản: ${(b.lines ?? [])[0] ?? ''}` : `Chữ ký: ${(b.roles ?? []).map((r) => r.title).join(' / ')}`)}
+        make={() => ({ kind: 'text', lines: [] })}
+        fields={[
+          { key: 'kind', label: 'Loại', kind: 'select', options: [{ value: 'text', label: 'Văn bản' }, { value: 'signatures', label: 'Hàng chữ ký' }] },
+          { key: 'align', label: 'Căn (văn bản)', kind: 'select', options: [{ value: 'left', label: 'Trái' }, { value: 'right', label: 'Phải' }], nullable: true },
+          { key: 'lines', label: 'Các dòng (văn bản)', kind: 'lines', wide: true },
+        ]}
+        extra={(b, _i, update) =>
+          b.kind === 'signatures' ? (
+            <ListEditor<SignatureRole>
+              items={b.roles ?? []}
+              onChange={(roles) => update({ roles } as Partial<FooterBlock>)}
+              title={(s) => s.title}
+              make={() => ({ title: '', titleEn: '' })}
+              fields={[
+                { key: 'title', label: 'Chức danh VI', kind: 'text' },
+                { key: 'titleEn', label: 'Chức danh EN', kind: 'text' },
+                { key: 'nameParam', label: 'Tham số tên', kind: 'select', options: runParamIds, nullable: true },
+                { key: 'name', label: 'Tên cố định', kind: 'text' },
+              ]}
+            />
+          ) : (
+            <p className="muted small">Chọn loại "Hàng chữ ký" để khai báo chức danh.</p>
+          )
+        }
       />
     </div>
   );

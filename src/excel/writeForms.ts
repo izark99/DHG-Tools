@@ -20,10 +20,10 @@ function colWidth(c: FormColumn): number {
 
 function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, Scalar>, testMode: boolean) {
   const def = form.def;
-  const L = def.layout;
-  const ws = wb.addWorksheet(L.sheetName || form.id, {
+  const L = form.layout ?? def.layout;
+  const ws = wb.addWorksheet((L.sheetName || form.id).slice(0, 31), {
     pageSetup: {
-      orientation: 'landscape',
+      orientation: L.orientation ?? 'landscape',
       paperSize: 9,
       fitToPage: true,
       fitToWidth: 1,
@@ -42,6 +42,7 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
   const visibleIdx = cols.map((c, i) => (form.hidden.includes(c.id) ? -1 : i + 1)).filter((i) => i > 0);
   const firstVis = visibleIdx[0] ?? 1;
   const lastVis = visibleIdx[visibleIdx.length - 1] ?? n;
+  const fill = (t: string | undefined) => fillTemplate(t ?? '', vars).trim();
 
   let r = 1;
   const line = (text: string, font: Partial<ExcelJS.Font>, align: ExcelJS.Alignment['horizontal'] = 'center') => {
@@ -53,18 +54,24 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
     r++;
   };
   if (L.companyName) {
-    ws.getCell(r, 1).value = fillTemplate(L.companyName, vars);
+    ws.getCell(r, 1).value = fill(L.companyName);
     ws.getCell(r, 1).font = { bold: true };
     r++;
   }
-  if (testMode) line('BẢN CHẠY THỬ (TEST) — KHÔNG GỬI KẾ TOÁN', { bold: true, color: { argb: 'FFC00000' } });
-  line(fillTemplate(L.titleVi, vars), { bold: true, size: 14 });
-  if (L.titleEn) line(fillTemplate(L.titleEn, vars), { italic: true, size: 12 });
-  for (const extra of L.extraLines ?? []) {
-    const t = fillTemplate(extra, vars).trim();
+  for (const pre of L.preLines ?? []) {
+    const t = fill(pre);
     if (t) line(t, { bold: true }, 'left');
   }
-  r++;
+  if (testMode) line('BẢN CHẠY THỬ (TEST) — KHÔNG GỬI KẾ TOÁN', { bold: true, color: { argb: 'FFC00000' } });
+  line(fill(L.titleVi), { bold: true, size: 14 });
+  if (L.titleEn) line(fill(L.titleEn), { italic: true, size: 12 });
+  for (const extra of L.extraLines ?? []) {
+    const t = fill(extra);
+    if (t) line(t, { bold: true }, 'left');
+  }
+  const totalTop = L.totalPosition === 'top';
+  const totalRowTop = totalTop ? r : -1;
+  r++; // the total row (top) or a blank row
 
   const hdrVi = r;
   const hdrEn = r + 1;
@@ -101,54 +108,72 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
   }
   const lastData = r - 1;
 
-  // Total row
+  // Total row (SUM formulas so Accounting can re-check)
+  const totalRow = totalTop ? totalRowTop : r;
   const labelCol = cols.findIndex((c) => c.type === 'text') + 1 || 1;
   cols.forEach((c, i) => {
-    const cell = ws.getCell(r, i + 1);
+    const cell = ws.getCell(totalRow, i + 1);
     cell.border = thin;
     cell.font = { bold: true };
     if (c.type === 'number' && c.total !== false) {
       const L1 = ws.getColumn(i + 1).letter;
-      cell.value = form.rows.length
-        ? { formula: `SUM(${L1}${firstData}:${L1}${lastData})`, result: form.totals[c.id] ?? 0 }
-        : 0;
+      cell.value = form.rows.length ? { formula: `SUM(${L1}${firstData}:${L1}${lastData})`, result: form.totals[c.id] ?? 0 } : 0;
       cell.numFmt = NUM;
     }
   });
-  ws.getCell(r, labelCol).value = 'Tổng cộng / Total';
-  r += 2;
+  ws.getCell(totalRow, labelCol).value = L.totalLabel || 'Tổng cộng / Total';
+  r = (totalTop ? lastData : totalRow) + 2;
 
-  // Signature block
-  const roles = L.signatures ?? [];
+  // Signature rows and footer blocks
+  const span = (roles: number, k: number) => {
+    const per = visibleIdx.length / roles;
+    const from = visibleIdx[Math.floor(k * per)] ?? firstVis;
+    const to = visibleIdx[Math.max(Math.floor((k + 1) * per) - 1, Math.floor(k * per))] ?? from;
+    return [from, to] as const;
+  };
+  const put = (row: number, from: number, to: number, text: string, font: Partial<ExcelJS.Font>, align: ExcelJS.Alignment['horizontal'] = 'center') => {
+    if (to > from) ws.mergeCells(row, from, row, to);
+    const c = ws.getCell(row, from);
+    c.value = text;
+    c.font = font;
+    c.alignment = { horizontal: align, wrapText: false };
+  };
+  const signatureRow = (roles: FormOut['layout']['signatures']) => {
+    if (!roles.length) return;
+    roles.forEach((role, k) => {
+      const [from, to] = span(roles.length, k);
+      put(r, from, to, fill(role.title), { bold: true });
+      if (role.titleEn) put(r + 1, from, to, fill(role.titleEn), { italic: true });
+      const name = role.nameParam ? vars[role.nameParam] : role.name;
+      if (name) put(r + 5, from, to, String(name), { bold: true });
+    });
+    r += 7;
+  };
   if (L.placeDate) {
-    const t = fillTemplate(L.placeDate, vars).trim();
+    const t = fill(L.placeDate);
     if (t) {
-      const start = Math.max(firstVis, lastVis - Math.max(2, Math.floor(visibleIdx.length / Math.max(roles.length, 1))) + 1);
-      ws.mergeCells(r, start, r, lastVis);
-      const c = ws.getCell(r, start);
-      c.value = t;
-      c.font = { italic: true };
-      c.alignment = { horizontal: 'center' };
+      const roles = L.signatures ?? [];
+      const [from, to] = roles.length ? span(roles.length, roles.length - 1) : [firstVis, lastVis];
+      put(r, from, to, t, { italic: true });
       r++;
     }
   }
-  if (roles.length) {
-    const span = visibleIdx.length / roles.length;
-    roles.forEach((role, k) => {
-      const from = visibleIdx[Math.floor(k * span)] ?? firstVis;
-      const to = visibleIdx[Math.max(Math.floor((k + 1) * span) - 1, Math.floor(k * span))] ?? from;
-      const put = (row: number, text: string, font: Partial<ExcelJS.Font>) => {
-        if (to > from) ws.mergeCells(row, from, row, to);
-        const c = ws.getCell(row, from);
-        c.value = text;
-        c.font = font;
-        c.alignment = { horizontal: 'center' };
-      };
-      put(r, role.title, { bold: true });
-      if (role.titleEn) put(r + 1, role.titleEn, { italic: true });
-      const name = role.nameParam ? vars[role.nameParam] : null;
-      if (name) put(r + 6, String(name), { bold: true });
-    });
+  signatureRow(L.signatures ?? []);
+  for (const b of L.footer ?? []) {
+    if (b.kind === 'signatures') signatureRow(b.roles);
+    else {
+      for (const t of b.lines) {
+        const text = fill(t);
+        if (text) {
+          if (b.align === 'right') {
+            const [from, to] = span(2, 1);
+            put(r, from, to, text, { italic: true });
+          } else put(r, firstVis, lastVis, text, {}, 'left');
+        }
+        r++;
+      }
+      r++;
+    }
   }
 }
 
@@ -195,7 +220,7 @@ export async function writeForms(config: FlowConfig, result: RunResult, testMode
   for (const s of result.extraSheets) addExtraSheet(wb, s, vars);
   if (!wb.worksheets.length) wb.addWorksheet('Empty');
   const buffer = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-  let fileName = fillTemplate(config.fileName || 'Form_{FLOW}_T{MM}.{YYYY}.xlsx', vars).replace(/[\\/:*?"<>|]+/g, '_');
+  let fileName = (result.fileName || fillTemplate(config.fileName || 'Form_{FLOW}_T{MM}.{YYYY}.xlsx', vars)).replace(/[\\/:*?"<>|]+/g, '_');
   if (!/\.xlsx$/i.test(fileName)) fileName += '.xlsx';
   if (testMode) fileName = fileName.replace(/\.xlsx$/i, '_TEST.xlsx');
   return { buffer, fileName };

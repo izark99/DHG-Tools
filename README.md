@@ -94,7 +94,7 @@ ROUND làm tròn như Excel (half away from zero). Chia cho 0 là lỗi (chặn 
 | 2 Run wizard + Excel | Xong — E2E: chạy trọn vòng, tải Form + ledger, reload không còn dữ liệu, không request nào mang dữ liệu lương |
 | 3 Admin: master, users, backup | Xong — round-trip xlsx 400 dòng; user không vào được màn hình/API admin |
 | 4 Flow editor, versions, test run | Xong — E2E: tạo từ file, công thức sai chặn publish, publish, rollback |
-| 5 Seed 5 flow từ workbook | **Chưa làm** — cần workbook `.xlsm` và file `.m` trong `reference/` |
+| 5 Seed 5 flow từ workbook | Xong — `seed/` (HQ, SL, IN, OI, QHY); test chạy cả 5 flow trên dữ liệu giả. Cách nạp và các điểm khác Excel: `docs/phase5-mapping.md` |
 | 6 Chạy song song | Việc của team C&B sau Phase 5 |
 
 Điểm mở (PLAN §2): phía chi trả của IN (cột/Form nào ghi vào sheet `actual` của ledger) — owner cần quyết định;

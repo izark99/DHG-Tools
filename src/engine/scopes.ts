@@ -12,11 +12,13 @@ export type FormulaSite =
   | { kind: 'formRowFilter'; form: 'form02' | 'form03' }
   | { kind: 'formColumn'; form: 'form02' | 'form03'; index: number }
   | { kind: 'check'; scope: CheckDef['scope'] }
-  | { kind: 'extraCell' };
+  | { kind: 'extraCell' }
+  | { kind: 'inputComputed' }
+  | { kind: 'template' };
 
 export function scopeFor(cfg: FlowConfig, vctx: ValidationContext, site: FormulaSite): ScopeInfo {
   const inputs: Record<string, string[]> = {};
-  for (const i of cfg.inputs ?? []) inputs[i.id] = (i.fields ?? []).map((f) => f.id);
+  for (const i of cfg.inputs ?? []) inputs[i.id] = [...(i.fields ?? []).map((f) => f.id), ...(i.computed ?? []).map((c) => c.id)];
   const run = [...RESERVED_RUN, ...(cfg.runParams ?? []).map((p) => p.id)];
   const base = { inputs, params: vctx.params, run, tables: vctx.tables };
   const empCols = (cfg.employeeTable?.columns ?? []).map((c) => c.id);
@@ -42,6 +44,9 @@ export function scopeFor(cfg: FlowConfig, vctx: ValidationContext, site: Formula
       if (site.scope === 'total') return totalInfo();
       return { ...rowInfo, scope: 'form', columns: formCols(site.scope) };
     case 'extraCell':
+    case 'template':
       return totalInfo();
+    case 'inputComputed':
+      return { ...base, scope: 'employee', columns: [] };
   }
 }

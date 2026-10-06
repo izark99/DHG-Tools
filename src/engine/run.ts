@@ -5,8 +5,8 @@ import { FormulaError, parse, type Node } from './formula/parser';
 import { excelRound } from './formula/round';
 import { balances, ledgerKey, mergeLedger, periodOf, type Ledger, type LedgerAccrualRow, type LedgerActualRow } from './ledger';
 import type { ParsedInput } from './inputs';
-import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FormDef, MasterTable, PeriodType, Scalar } from './types';
-import { fillTemplate, normKey, periodLabel } from './util';
+import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FormDef, FormLayout, MasterTable, PeriodType, Scalar } from './types';
+import { fillTemplate, normKey, periodLabel, runVars } from './util';
 
 export interface RunParams {
   month: number;
@@ -67,6 +67,8 @@ export interface FormRowOut {
 export interface FormOut {
   id: 'form02' | 'form03';
   def: FormDef;
+  /** Layout with every template ({MM}, {param}, {=formula}) already filled in. */
+  layout: FormLayout;
   rows: FormRowOut[];
   totals: Record<string, number>;
   hidden: string[];
@@ -86,6 +88,8 @@ export interface RunResult {
   form02: FormOut | null;
   form03: FormOut | null;
   extraSheets: ExtraSheetOut[];
+  /** Output file name with templates filled in. */
+  fileName: string;
   issues: Issue[];
   ledgerOut: Ledger | null;
   blocked: boolean;
@@ -186,6 +190,16 @@ export function runFlow(ctx: RunContext): RunResult {
     return r[col];
   };
 
+  const itemByHelper = new Map(config.costItems.map((c) => [normKey(c.helper), c]));
+  const itemField = (helper: string, field: string): Value => {
+    const it = itemByHelper.get(normKey(helper));
+    if (!it) throw new FormulaError(`Không có cost item "${helper}"`);
+    if (!(field in it) && !['nameEn', 'employeeAmount', 'helperColumn', 'costCenterColumn', 'unitFilter'].includes(field))
+      throw new FormulaError(`Cost item không có thuộc tính "${field}"`);
+    const v = (it as unknown as Record<string, Scalar | undefined>)[field];
+    return v === undefined ? null : v;
+  };
+
   // ---- inputs --------------------------------------------------------------
   for (const def of config.inputs) {
     const p = ctx.inputs[def.id];
@@ -197,19 +211,64 @@ export function runFlow(ctx: RunContext): RunResult {
     if (p.skippedBlankKey) issues.add('warning', 'input', `${def.label || def.id}: bỏ qua ${p.skippedBlankKey} dòng không có mã (dòng tổng / dòng trống)`);
   }
   const inputIndex = new Map<string, Map<string, Record<string, Scalar>[]>>();
+  const inputRows = new Map<string, Record<string, Scalar>[]>();
   for (const def of config.inputs) {
-    const p = ctx.inputs[def.id];
-    const m = new Map<string, Record<string, Scalar>[]>();
-    if (p)
-      for (const r of p.rows) {
-        const k = normKey(r[def.key]);
-        const arr = m.get(k);
-        if (arr) arr.push(r);
-        else m.set(k, [r]);
+    let rows = ctx.inputs[def.id]?.rows ?? [];
+    if (def.computed?.length && rows.length) {
+      rows = rows.map((r) => ({ ...r }));
+      for (const cf of def.computed) {
+        const node = compile(cf.formula);
+        if (node instanceof FormulaError) {
+          issues.add('error', 'formula', `${def.label || def.id} — trường tính [${cf.id}]: ${node.message}`);
+          for (const r of rows) r[cf.id] = cf.type === 'number' ? 0 : '';
+          continue;
+        }
+        for (const r of rows) {
+          const empKey = normKey(r[def.key]);
+          const env: Env = {
+            column: () => {
+              throw new FormulaError('Trường tính của input không dùng [cột]');
+            },
+            ref(ns, path, mode) {
+              if (ns === 'in') {
+                if (path[0] === def.id) {
+                  const v = r[path[1]] ?? null;
+                  return mode === 'all' ? [v] : v;
+                }
+                const other = inputIndex.get(path[0]);
+                if (!other) throw new FormulaError(`Input "${path[0]}" chưa đọc (đặt input đó lên trước)`);
+                const rs = other.get(empKey) ?? [];
+                if (mode === 'sum') return rs.reduce((a, x) => a + toNum(x[path[1]] ?? null), 0);
+                if (mode === 'all') return rs.map((x) => x[path[1]] ?? null);
+                return rs[0]?.[path[1]] ?? null;
+              }
+              return baseRef(ns, path);
+            },
+            lookup,
+            item: itemField,
+          };
+          try {
+            const v = evaluate(node, env);
+            r[cf.id] = cf.type === 'number' ? excelNum(toNum(v)) : toStr(v);
+          } catch (e) {
+            if (!(e instanceof FormulaError)) throw e;
+            issues.add('error', 'formula', `${def.label || def.id} — trường tính [${cf.id}]: ${e.message}`, str(r[def.key]));
+            r[cf.id] = cf.type === 'number' ? 0 : '';
+          }
+        }
       }
+    }
+    inputRows.set(def.id, rows);
+    const m = new Map<string, Record<string, Scalar>[]>();
+    for (const r of rows) {
+      const k = normKey(r[def.key]);
+      const arr = m.get(k);
+      if (arr) arr.push(r);
+      else m.set(k, [r]);
+    }
     inputIndex.set(def.id, m);
   }
-  const inputAll = (id: string, field: string): Value => (ctx.inputs[id]?.rows ?? []).map((r) => r[field] ?? null);
+  const inputAll = (id: string, field: string): Value => (inputRows.get(id) ?? []).map((r) => r[field] ?? null);
 
   // ---- employee table ------------------------------------------------------
   const et = config.employeeTable;
@@ -242,6 +301,7 @@ export function runFlow(ctx: RunContext): RunResult {
         return baseRef(ns, path);
       },
       lookup,
+      item: itemField,
       cc: (col) => ccValue(values[agg.unitColumn] ?? null, col),
       scopeRows: () => emps,
       memo: empMemo,
@@ -251,7 +311,7 @@ export function runFlow(ctx: RunContext): RunResult {
 
   if (srcDef) {
     const seen = new Set<string>();
-    for (const r of ctx.inputs[srcDef.id]?.rows ?? []) {
+    for (const r of inputRows.get(srcDef.id) ?? []) {
       const key = str(r[srcDef.key]);
       const norm = normKey(key);
       if (seen.has(norm)) continue;
@@ -321,6 +381,7 @@ export function runFlow(ctx: RunContext): RunResult {
       },
       ref: (ns, path) => (ns === 'row' ? (fields[path[0]] ?? null) : baseRef(ns, path)),
       lookup,
+      item: itemField,
       cc: (col) => ccValue(unit, col),
     };
   };
@@ -342,7 +403,6 @@ export function runFlow(ctx: RunContext): RunResult {
     return v;
   };
 
-  const itemByHelper = new Map(config.costItems.map((c) => [normKey(c.helper), c]));
   const itemUnit = new Map<string, boolean>();
   const itemAppliesTo = (ci: CostItem, unit: string): boolean => {
     const k = `${normKey(ci.helper)}|${normKey(unit)}`;
@@ -364,12 +424,13 @@ export function runFlow(ctx: RunContext): RunResult {
   };
   const empByUnit = new Map<string, EmpEnv[]>();
   const groups = new Map<string, AggRow>();
+  const members = new WeakMap<AggRow, EmpEnv[]>();
 
   for (const e of emps) {
     const unit = str(e.values[agg.unitColumn]);
     const amounts = config.costItems.map((ci) => ({
       ci,
-      amount: toNum(e.values[ci.amount] ?? null),
+      amount: ci.amount ? toNum(e.values[ci.amount] ?? null) : 0,
       emp: ci.employeeAmount ? toNum(e.values[ci.employeeAmount] ?? null) : 0,
     }));
     const hasMoney = amounts.some((a) => a.amount !== 0 || a.emp !== 0);
@@ -395,20 +456,25 @@ export function runFlow(ctx: RunContext): RunResult {
         issues.add('warning', 'aggregation', `Cost item ${ci.helper} không áp dụng cho đơn vị này (bộ lọc đơn vị của cost item) — số tiền bị loại khỏi Form`, `${e.key} (${unit})`);
         continue;
       }
-      let budget: string;
-      if (ccTable && ccTable.columns.includes(ci.budget)) {
-        budget = str(ccRow[ci.budget]);
-        if (!budget) issues.add('error', 'aggregation', `Đơn vị thiếu Budget Code ở cột "${ci.budget}" của ${agg.costCenterTable}`, unit);
-      } else budget = ci.budget;
       let item: CostItem = ci;
       let helper = ci.helper;
       if (ci.helperColumn) {
         const h = str(e.values[ci.helperColumn]);
-        if (h) {
-          helper = h;
-          item = itemByHelper.get(normKey(h)) ?? ci;
+        if (h && normKey(h) !== normKey(ci.helper)) {
+          const target = itemByHelper.get(normKey(h));
+          if (!target) {
+            issues.add('error', 'aggregation', `Helper "${h}" (từ cột ${ci.helperColumn}) không có trong danh sách cost item — số tiền bị loại khỏi Form`, e.key);
+            continue;
+          }
+          helper = target.helper;
+          item = target;
         }
       }
+      let budget: string;
+      if (ccTable && ccTable.columns.includes(item.budget)) {
+        budget = str(ccRow[item.budget]);
+        if (!budget) issues.add('error', 'aggregation', `Đơn vị thiếu Budget Code ở cột "${item.budget}" của ${agg.costCenterTable}`, unit);
+      } else budget = item.budget;
       let costCenter = str(ccRow[agg.costCenterColumn]);
       if (ci.costCenterColumn) {
         const c = str(e.values[ci.costCenterColumn]);
@@ -444,6 +510,9 @@ export function runFlow(ctx: RunContext): RunResult {
       g.amount += amount;
       g.employeeAmount += emp;
       g.count++;
+      const ms = members.get(g);
+      if (ms) ms.push(e);
+      else members.set(g, [e]);
     }
   }
 
@@ -475,7 +544,13 @@ export function runFlow(ctx: RunContext): RunResult {
   const buildForm = (id: 'form02' | 'form03', def: FormDef): FormOut | null => {
     if (!def.enabled) return null;
     const label = id === 'form02' ? 'Form 02' : 'Form 03';
-    let cands: AggRow[] = aggRows.filter((r) => (id === 'form02' ? r.accrue : r.pay)).map((r) => ({ ...r }));
+    let cands: AggRow[] = aggRows
+      .filter((r) => (id === 'form02' ? r.accrue : r.pay))
+      .map((r) => {
+        const copy = { ...r };
+        members.set(copy, members.get(r) ?? []);
+        return copy;
+      });
 
     if (def.adjust) {
       if (!ledger) issues.add('error', 'ledger', `${label}: cần sổ ledger để tính điều chỉnh`);
@@ -575,8 +650,10 @@ export function runFlow(ctx: RunContext): RunResult {
           return baseRef(ns, path);
         },
         lookup,
+        item: itemField,
         cc: (col) => ccValue(r.unit, col),
         unitEmployees: () => empByUnit.get(normKey(r.unit)) ?? [],
+        rowEmployees: () => members.get(r) ?? [],
         unitPeers: () => byUnit.get(normKey(r.unit)) ?? [],
         scopeRows: () => envs,
         memo,
@@ -597,6 +674,7 @@ export function runFlow(ctx: RunContext): RunResult {
       totals[c.id] = t;
       if (c.hideIfZeroTotal && t === 0) hidden.push(c.id);
     }
+    for (const c of def.columns) if (c.hidden && !hidden.includes(c.id)) hidden.push(c.id);
 
     // ledger feed
     const feed = def.ledgerFeed;
@@ -621,7 +699,7 @@ export function runFlow(ctx: RunContext): RunResult {
       }
     }
 
-    return { id, def, rows: envs.map((e) => ({ row: e.row, values: e.values })), totals, hidden };
+    return { id, def, layout: def.layout, rows: envs.map((e) => ({ row: e.row, values: e.values })), totals, hidden };
   };
 
   const rowField = (r: AggRow, f: string): Scalar => {
@@ -634,6 +712,7 @@ export function runFlow(ctx: RunContext): RunResult {
     },
     ref: (ns, path) => (ns === 'row' ? rowField(r, path[0]) : baseRef(ns, path)),
     lookup,
+    item: itemField,
     cc: (col) => ccValue(r.unit, col),
   });
 
@@ -653,6 +732,7 @@ export function runFlow(ctx: RunContext): RunResult {
       return baseRef(ns, path);
     },
     lookup,
+    item: itemField,
   };
 
   const runCheck = (c: CheckDef) => {
@@ -687,8 +767,10 @@ export function runFlow(ctx: RunContext): RunResult {
           },
           ref: (ns, path) => (ns === 'row' ? rowField(fr.row, path[0]) : baseRef(ns, path)),
           lookup,
+          item: itemField,
           cc: (col) => ccValue(fr.row.unit, col),
           unitEmployees: () => empByUnit.get(normKey(fr.row.unit)) ?? [],
+          rowEmployees: () => members.get(fr.row) ?? [],
           unitPeers: () => byUnit.get(normKey(fr.row.unit)) ?? [],
           scopeRows: () => envs,
           memo,
@@ -727,6 +809,43 @@ export function runFlow(ctx: RunContext): RunResult {
     ),
   }));
 
+  // ---- templates: {MM}, {param}, {=formula} --------------------------------------
+  const vars: Record<string, Scalar> = { ...runVars(run), FLOW: config.id, flow: config.id, flowName: config.name };
+  const render = (tpl: string | undefined | null, where: string): string => {
+    if (!tpl) return '';
+    const withFormulas = tpl.replace(/\{=([^{}]*)\}/g, (_m, expr: string) => {
+      const node = compile(expr);
+      try {
+        if (node instanceof FormulaError) throw node;
+        const v = evaluate(node, totalEnv);
+        return Array.isArray(v) ? v.map((x) => toStr(x as Scalar)).join(', ') : toStr(v);
+      } catch (e) {
+        if (!(e instanceof FormulaError)) throw e;
+        issues.add('error', 'layout', `${where}: ${e.message}`);
+        return '#LỖI';
+      }
+    });
+    return fillTemplate(withFormulas, vars);
+  };
+  const renderLayout = (L: FormLayout, label: string): FormLayout => ({
+    ...L,
+    companyName: render(L.companyName, `${label} tên công ty`),
+    titleVi: render(L.titleVi, `${label} tiêu đề VI`),
+    titleEn: render(L.titleEn, `${label} tiêu đề EN`),
+    preLines: (L.preLines ?? []).map((x, i) => render(x, `${label} dòng trước tiêu đề ${i + 1}`)),
+    extraLines: (L.extraLines ?? []).map((x, i) => render(x, `${label} dòng sau tiêu đề ${i + 1}`)),
+    placeDate: render(L.placeDate, `${label} nơi/ngày ký`),
+    signatures: (L.signatures ?? []).map((r) => ({ ...r, title: render(r.title, `${label} chữ ký`), titleEn: render(r.titleEn, `${label} chữ ký`) })),
+    footer: (L.footer ?? []).map((b) =>
+      b.kind === 'text'
+        ? { ...b, lines: b.lines.map((x) => render(x, `${label} footer`)) }
+        : { ...b, roles: b.roles.map((r) => ({ ...r, title: render(r.title, `${label} footer`), titleEn: render(r.titleEn, `${label} footer`) })) },
+    ),
+  });
+  if (form02) form02.layout = renderLayout(form02.def.layout, 'Form 02');
+  if (form03) form03.layout = renderLayout(form03.def.layout, 'Form 03');
+  const fileName = render(config.fileName || 'Form_{FLOW}_T{MM}.{YYYY}.xlsx', 'Tên file');
+
   // ---- ledger ------------------------------------------------------------------
   const feeds = [config.forms.form02, config.forms.form03].some((f) => f.enabled && f.ledgerFeed?.sheet !== 'none');
   const usesLedger = feeds || config.forms.form02.adjust || config.forms.form03.adjust;
@@ -742,6 +861,7 @@ export function runFlow(ctx: RunContext): RunResult {
     form02,
     form03,
     extraSheets,
+    fileName,
     issues: list,
     ledgerOut,
     blocked: list.some((i) => i.level === 'error'),

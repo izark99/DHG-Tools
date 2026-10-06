@@ -1,0 +1,827 @@
+{
+  "schemaVersion": 1,
+  "id": "QHY",
+  "name": "QHY — Trích thưởng quý, 6 tháng, năm",
+  "ledger": "shared",
+  "fileName": "Form_QHY_T{MM}.{YYYY}.xlsx",
+  "inputs": [
+    {
+      "id": "EmployeeList",
+      "label": "Danh sách nhân viên (Employee List)",
+      "required": true,
+      "key": "emp_id",
+      "fields": [
+        {
+          "id": "emp_id",
+          "label": "Mã NV",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã NV"
+          ]
+        },
+        {
+          "id": "ho",
+          "label": "Họ",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Họ"
+          ]
+        },
+        {
+          "id": "ten",
+          "label": "Tên",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Tên"
+          ]
+        },
+        {
+          "id": "title_code",
+          "label": "Mã Chức Danh",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Mã Chức Danh"
+          ]
+        },
+        {
+          "id": "title",
+          "label": "Chức Danh",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Chức Danh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SalarySetting",
+      "label": "Thiết lập lương (Salary Setting)",
+      "required": true,
+      "key": "emp_id",
+      "fields": [
+        {
+          "id": "emp_id",
+          "label": "Mã NV",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã NV"
+          ]
+        },
+        {
+          "id": "unit",
+          "label": "Mã BP",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã BP"
+          ]
+        },
+        {
+          "id": "grade",
+          "label": "Hạng",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Hạng"
+          ]
+        },
+        {
+          "id": "coef4d",
+          "label": "HS.4D",
+          "type": "number",
+          "required": false,
+          "aliases": [
+            "HS.4D"
+          ]
+        },
+        {
+          "id": "salary4d",
+          "label": "Lương 4D",
+          "type": "number",
+          "required": false,
+          "aliases": [
+            "Lương 4D"
+          ]
+        }
+      ]
+    }
+  ],
+  "runParams": [
+    {
+      "id": "hr_manager",
+      "label": "Trưởng Phòng Nhân sự (tên in)",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "reporter",
+      "label": "Người đề nghị (tên in)",
+      "type": "text",
+      "default": ""
+    }
+  ],
+  "employeeTable": {
+    "source": "EmployeeList",
+    "rowFilter": null,
+    "columns": [
+      {
+        "id": "emp_id",
+        "label": "Mã NV",
+        "formula": "in.EmployeeList.emp_id",
+        "type": "text"
+      },
+      {
+        "id": "unit",
+        "label": "Mã BP",
+        "formula": "in.SalarySetting.unit",
+        "type": "text"
+      },
+      {
+        "id": "dv",
+        "label": "Mã ĐV",
+        "formula": "LOOKUP(\"CostCenter\", [unit], \"Dept\", \"\")",
+        "type": "text"
+      },
+      {
+        "id": "name",
+        "label": "Họ và tên",
+        "formula": "TEXTJOIN(\" \", TRUE, in.EmployeeList.ho, in.EmployeeList.ten)",
+        "type": "text"
+      },
+      {
+        "id": "title_code",
+        "label": "Mã Chức Danh",
+        "formula": "in.EmployeeList.title_code",
+        "type": "text"
+      },
+      {
+        "id": "channel",
+        "label": "Kênh",
+        "formula": "LOOKUP(\"QHY_Group\", [title_code], \"Kênh\", \"\")",
+        "type": "text"
+      },
+      {
+        "id": "grade",
+        "label": "Ngạch",
+        "formula": "in.SalarySetting.grade",
+        "type": "text"
+      },
+      {
+        "id": "group",
+        "label": "Nhóm",
+        "formula": "IFERROR(LOOKUP(\"QHY_Group\", [title_code], \"Nhóm\"), IF(VALUE(LEFT([grade], 1)) > 2, \"Normal\", IF(CC(\"Monthly KPI\"), \"Production Monthly KPI\", \"Normal\")))",
+        "type": "text"
+      },
+      {
+        "id": "base",
+        "label": "Lương tháng x hệ số",
+        "formula": "in.SalarySetting.salary4d * IF(in.SalarySetting.coef4d = 0, 1, in.SalarySetting.coef4d)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "kpi_q",
+        "label": "Thưởng KPI Quý",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng KPI Quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng KPI Quý\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng KPI Quý\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "kpi_h",
+        "label": "Thưởng KPI 6 tháng",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng KPI 6 tháng\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng KPI 6 tháng\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng KPI 6 tháng\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "kpi_y",
+        "label": "Thưởng KPI Năm",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng KPI Năm\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng KPI Năm\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng KPI Năm\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "cash_q",
+        "label": "Thưởng thu tiền Quý",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng thu tiền Quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng thu tiền Quý\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng thu tiền Quý\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "sales_q",
+        "label": "Thưởng doanh số Quý",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng doanh số Quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng doanh số Quý\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng doanh số Quý\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "sales_y",
+        "label": "Thưởng doanh số Năm",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng doanh số Năm\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng doanh số Năm\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng doanh số Năm\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "excess_q",
+        "label": "Thưởng vượt quý",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng vượt quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng vượt quý\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng vượt quý\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_hospital",
+        "label": "Thưởng khích lệ bán hàng quý - Hospital",
+        "formula": "IF([channel] = \"Hospital\", LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng khích lệ bán hàng quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - Hospital\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - Hospital\", \"Số chia\"), 0)), 0)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_bu2",
+        "label": "Thưởng khích lệ bán hàng quý - BU2",
+        "formula": "IF([channel] = \"BU2\", LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng khích lệ bán hàng quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - BU2\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - BU2\", \"Số chia\"), 0)), 0)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_bu3",
+        "label": "Thưởng khích lệ bán hàng quý - BU3",
+        "formula": "IF([channel] = \"BU3\", LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng khích lệ bán hàng quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - BU3\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - BU3\", \"Số chia\"), 0)), 0)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_mt",
+        "label": "Thưởng khích lệ bán hàng quý - Modern Trade",
+        "formula": "IF([channel] = \"Modern Trade\", LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng khích lệ bán hàng quý\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - Modern Trade\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng quý - Modern Trade\", \"Số chia\"), 0)), 0)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_h",
+        "label": "Thưởng Khích Lệ Bán Hàng 6 Tháng",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng Khích Lệ Bán Hàng 6 Tháng\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng Khích Lệ Bán Hàng 6 Tháng\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng Khích Lệ Bán Hàng 6 Tháng\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "si_y",
+        "label": "Thưởng khích lệ bán hàng năm",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng khích lệ bán hàng năm\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng năm\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng khích lệ bán hàng năm\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "hung_vuong",
+        "label": "Thưởng Hùng Vương",
+        "formula": "ROUND(IF(run.month > 4, 0, LOOKUP(\"QHY_Bonus\", \"Thưởng Hùng Vương\", \"% trích\") * P.HUNGKING / LOOKUP(\"QHY_Bonus\", \"Thưởng Hùng Vương\", \"Số chia\")), 0)",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "holiday",
+        "label": "Thưởng Lễ",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng Lễ\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng Lễ\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng Lễ\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "profit",
+        "label": "Thưởng Đạt Doanh Thu - Lợi Nhuận",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Thưởng Đạt Doanh Thu - Lợi Nhuận\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Thưởng Đạt Doanh Thu - Lợi Nhuận\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Thưởng Đạt Doanh Thu - Lợi Nhuận\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "team",
+        "label": "Huấn luyện nội bộ",
+        "formula": "LET(x, LOOKUP2(\"QHY_Scheme\", [group], \"Huấn luyện nội bộ\"), ROUND(LOOKUP(\"QHY_Bonus\", \"Huấn luyện nội bộ\", \"% trích\") * IF(ISNUMBER(VALUE(x)), x, VALUE(TEXTBEFORE(x, \" * \")) * [base]) / LOOKUP(\"QHY_Bonus\", \"Huấn luyện nội bộ\", \"Số chia\"), 0))",
+        "type": "number",
+        "show": true
+      },
+      {
+        "id": "c0311Q",
+        "label": "0311Q",
+        "formula": "ROUND([kpi_q], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0311H",
+        "label": "0311H",
+        "formula": "ROUND([kpi_h], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0311Y",
+        "label": "0311Y",
+        "formula": "ROUND([kpi_y], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0323Q",
+        "label": "0323Q",
+        "formula": "ROUND([cash_q], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0317Q_ST",
+        "label": "0317Q_ST",
+        "formula": "ROUND([sales_q], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0317Y_ST",
+        "label": "0317Y_ST",
+        "formula": "ROUND([sales_y], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0322Q",
+        "label": "0322Q",
+        "formula": "ROUND([excess_q], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0317Q_SI",
+        "label": "0317Q_SI",
+        "formula": "ROUND([si_hospital] + [si_bu2] + [si_bu3] + [si_mt], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0317H_SI",
+        "label": "0317H_SI",
+        "formula": "ROUND([si_h], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0317Y_SI",
+        "label": "0317Y_SI",
+        "formula": "ROUND([si_y], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0310Y_HB",
+        "label": "0310Y_HB",
+        "formula": "ROUND([holiday] + [hung_vuong], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0310Y_AB",
+        "label": "0310Y_AB",
+        "formula": "ROUND([profit], 0)",
+        "type": "number",
+        "show": false
+      },
+      {
+        "id": "c0413M_TB",
+        "label": "0413M_TB",
+        "formula": "ROUND([team], 0)",
+        "type": "number",
+        "show": false
+      }
+    ]
+  },
+  "costItems": [
+    {
+      "helper": "0310Y_HB",
+      "costCode": "0310",
+      "nameVi": "Trích Thưởng Định Kỳ",
+      "nameEn": "",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "c0310Y_HB",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0310Y_AB",
+      "costCode": "0310",
+      "nameVi": "Trích Thưởng Đạt Doanh Thu - Lợi Nhuận",
+      "nameEn": "",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "c0310Y_AB",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0311Q",
+      "costCode": "0311",
+      "nameVi": "Trích Thưởng KPI Quý",
+      "nameEn": "",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "c0311Q",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0311H",
+      "costCode": "0311",
+      "nameVi": "Trích Thưởng KPI 6 Tháng",
+      "nameEn": "",
+      "periodType": "H",
+      "budget": "HR",
+      "amount": "c0311H",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0311Y",
+      "costCode": "0311",
+      "nameVi": "Trích Thưởng KPI Năm",
+      "nameEn": "",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "c0311Y",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0322Q",
+      "costCode": "0322",
+      "nameVi": "Trích Thưởng Vượt Quý",
+      "nameEn": "",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "c0322Q",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0323Q",
+      "costCode": "0323",
+      "nameVi": "Trích Thưởng Thu Tiền Quý",
+      "nameEn": "",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "c0323Q",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0317Q_ST",
+      "costCode": "0317",
+      "nameVi": "Trích Thưởng Doanh Số Quý",
+      "nameEn": "",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "c0317Q_ST",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0317Y_ST",
+      "costCode": "0317",
+      "nameVi": "Trích Thưởng Doanh Số Năm",
+      "nameEn": "",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "c0317Y_ST",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0317Q_SI",
+      "costCode": "0317",
+      "nameVi": "Trích Thưởng Khích Lệ Bán Hàng Quý",
+      "nameEn": "",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "c0317Q_SI",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0317H_SI",
+      "costCode": "0317",
+      "nameVi": "Trích Thưởng Khích Lệ Bán Hàng 6 Tháng",
+      "nameEn": "",
+      "periodType": "H",
+      "budget": "HR",
+      "amount": "c0317H_SI",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0317Y_SI",
+      "costCode": "0317",
+      "nameVi": "Trích Thưởng Khích Lệ Bán Hàng Năm",
+      "nameEn": "",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "c0317Y_SI",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    },
+    {
+      "helper": "0413M_TB",
+      "costCode": "0413",
+      "nameVi": "Trích Chi Phí Huấn Luyện Nội Bộ",
+      "nameEn": "",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "c0413M_TB",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": false
+    }
+  ],
+  "aggregation": {
+    "unitColumn": "unit",
+    "costCenterTable": "CostCenter",
+    "deptColumn": "Dept",
+    "costCenterColumn": "Cost Center",
+    "sectorColumn": "Sector",
+    "unitFilter": "NOT(CONTAINS(row.unit, \"Z\"))",
+    "descriptionTemplate": "{name}_{period}_{dept}-{unit}"
+  },
+  "forms": {
+    "form02": {
+      "enabled": true,
+      "prefix": "",
+      "rowFilter": null,
+      "adjust": true,
+      "ledgerFeed": {
+        "sheet": "accrual",
+        "amountColumn": "accrual"
+      },
+      "columns": [
+        {
+          "id": "no",
+          "headerVi": "STT",
+          "headerEn": "No",
+          "formula": "row.no",
+          "type": "number",
+          "width": 4.7,
+          "total": false
+        },
+        {
+          "id": "sector",
+          "headerVi": "Khối",
+          "headerEn": "Sector",
+          "formula": "row.sector",
+          "type": "text",
+          "width": 5.7
+        },
+        {
+          "id": "dept",
+          "headerVi": "Mã đơn vị",
+          "headerEn": "Dept",
+          "formula": "row.dept",
+          "type": "text",
+          "width": 6
+        },
+        {
+          "id": "unit",
+          "headerVi": "Mã bộ phận",
+          "headerEn": "Unit",
+          "formula": "row.unit",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "budget",
+          "headerVi": "Ngân sách",
+          "headerEn": "Budget Code",
+          "formula": "row.budgetCode",
+          "type": "text",
+          "width": 8.5
+        },
+        {
+          "id": "cc",
+          "headerVi": "TTCP",
+          "headerEn": "Cost Center",
+          "formula": "row.costCenter",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "costCode",
+          "headerVi": "Mã chi phí",
+          "headerEn": "Cost Code",
+          "formula": "row.costCode",
+          "type": "text",
+          "width": 6.5
+        },
+        {
+          "id": "desc",
+          "headerVi": "Nội Dung",
+          "headerEn": "Description",
+          "formula": "row.name & \"_T\" & TEXT(run.month, \"00\") & \".\" & run.year & \"_\" & row.dept & \"-\" & row.unit",
+          "type": "text",
+          "width": 30.7
+        },
+        {
+          "id": "accrual",
+          "headerVi": "Số tiền trích kỳ này",
+          "headerEn": "Accrual amount this period",
+          "formula": "row.amount",
+          "type": "number",
+          "width": 14.3
+        },
+        {
+          "id": "adjusted",
+          "headerVi": "Số điều chỉnh kỳ trước",
+          "headerEn": "Adjusted amount last period",
+          "formula": "row.adjusted",
+          "type": "number",
+          "width": 14.3
+        },
+        {
+          "id": "actual",
+          "headerVi": "Số phải trích kỳ này",
+          "headerEn": "Actual accrual amount this period",
+          "formula": "[accrual] + [adjusted]",
+          "type": "number",
+          "width": 14.3
+        }
+      ],
+      "layout": {
+        "sheetName": "Accrual This Period",
+        "companyName": "CÔNG TY CỔ PHẦN DƯỢC HẬU GIANG",
+        "titleVi": "BẢNG TỔNG HỢP TRÍCH THƯỞNG QUÝ - 6 THÁNG - NĂM - THÁNG {MM}.{YYYY}",
+        "titleEn": "SUMMARY TABLE OF QUARTERLY / HALF-YEARLY / YEARLY BONUS ACCRUAL - {MM}.{YYYY}",
+        "placeDate": "TP. Cần Thơ, ngày 03 tháng {=TEXT(MONTH(EOMONTH(DATE(run.year, run.month, 1), 1)), \"00\")} năm {=YEAR(EOMONTH(DATE(run.year, run.month, 1), 1))}",
+        "signatures": [
+          {
+            "title": "Trưởng Phòng Nhân sự",
+            "titleEn": "Human Resource Manager",
+            "nameParam": "hr_manager"
+          },
+          {
+            "title": "Người đề nghị",
+            "titleEn": "Reporter",
+            "nameParam": "reporter"
+          }
+        ],
+        "footer": [
+          {
+            "kind": "text",
+            "align": "right",
+            "lines": [
+              "Ý kiến soát xét của phòng kế toán (*)/Phòng Tài chính (*)",
+              "Review of Accounting Department (*)/ Finance Department (*)"
+            ]
+          },
+          {
+            "kind": "text",
+            "lines": [
+              "o  Đồng ý đề nghị trích trước khoản mục STT……",
+              "    Agree with the accrual request item No ……",
+              "o  Không đồng ý đề nghị trích trước khoản mục STT…… Lý do ……",
+              "    Disagree with the accrual request of items No. …… Reason:……"
+            ]
+          },
+          {
+            "kind": "signatures",
+            "roles": [
+              {
+                "title": "PHÒNG KẾ TOÁN (*)/ PHÒNG TÀI CHÍNH (*)",
+                "titleEn": "Accounting Department (*)/ Finance Department (*)"
+              },
+              {
+                "title": "PHÊ DUYỆT CỦA GIÁM ĐỐC TÀI CHÍNH (**)",
+                "titleEn": "Approval Of Finance Director (**)"
+              }
+            ]
+          }
+        ],
+        "orientation": "portrait",
+        "totalPosition": "bottom",
+        "totalLabel": "Total"
+      }
+    },
+    "form03": {
+      "enabled": false,
+      "prefix": "",
+      "rowFilter": null,
+      "adjust": false,
+      "ledgerFeed": {
+        "sheet": "none",
+        "amountColumn": ""
+      },
+      "columns": [],
+      "layout": {
+        "sheetName": "Form 03",
+        "companyName": "CÔNG TY CỔ PHẦN DƯỢC HẬU GIANG",
+        "titleVi": "",
+        "titleEn": "",
+        "placeDate": "",
+        "signatures": [
+          {
+            "title": "Trưởng Phòng Nhân sự",
+            "titleEn": "Human Resource Manager",
+            "nameParam": "hr_manager"
+          },
+          {
+            "title": "Người đề nghị",
+            "titleEn": "Reporter",
+            "nameParam": "reporter"
+          }
+        ],
+        "footer": [
+          {
+            "kind": "text",
+            "align": "right",
+            "lines": [
+              "Ý kiến soát xét của phòng kế toán (*)/Phòng Tài chính (*)",
+              "Review of Accounting Department (*)/ Finance Department (*)"
+            ]
+          },
+          {
+            "kind": "text",
+            "lines": [
+              "o  Đồng ý đề nghị trích trước khoản mục STT……",
+              "    Agree with the accrual request item No ……",
+              "o  Không đồng ý đề nghị trích trước khoản mục STT…… Lý do ……",
+              "    Disagree with the accrual request of items No. …… Reason:……"
+            ]
+          },
+          {
+            "kind": "signatures",
+            "roles": [
+              {
+                "title": "PHÒNG KẾ TOÁN (*)/ PHÒNG TÀI CHÍNH (*)",
+                "titleEn": "Accounting Department (*)/ Finance Department (*)"
+              },
+              {
+                "title": "PHÊ DUYỆT CỦA GIÁM ĐỐC TÀI CHÍNH (**)",
+                "titleEn": "Approval Of Finance Director (**)"
+              }
+            ]
+          }
+        ],
+        "orientation": "portrait",
+        "totalPosition": "bottom",
+        "totalLabel": "Total"
+      }
+    }
+  },
+  "checks": [
+    {
+      "id": "dup_emp",
+      "level": "error",
+      "scope": "employee",
+      "formula": "COUNTIFS(in.EmployeeList.emp_id, [emp_id]) = 1",
+      "message": "Mã NV xuất hiện nhiều lần trong Employee List (Employee List!A1)"
+    },
+    {
+      "id": "blank_unit",
+      "level": "error",
+      "scope": "employee",
+      "formula": "NOT(ISBLANK([unit]))",
+      "message": "Nhân viên không có Mã BP trong Salary Setting (Accrual This Period!D2)"
+    },
+    {
+      "id": "blank_dept",
+      "level": "error",
+      "scope": "employee",
+      "formula": "NOT(ISBLANK([dv]))",
+      "message": "Mã BP không có trong CostCenter (Accrual This Period!C2)"
+    },
+    {
+      "id": "position_unit",
+      "level": "error",
+      "scope": "employee",
+      "formula": "IF(IN([title_code], \"BH_025\", \"BH_026\"), TRUE, IF(IN([title_code], \"BH_003\", \"BH_004\"), LOOKUP(\"CostCenter\", [unit], \"Position\", \"\") = [title_code], TRUE))",
+      "message": "Chức danh bán hàng không khớp vị trí của đơn vị (Form 01 Check)"
+    },
+    {
+      "id": "form02_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f02.accrual) = SUM(emp.c0311Q, emp.c0311H, emp.c0311Y, emp.c0323Q, emp.c0317Q_ST, emp.c0317Y_ST, emp.c0322Q, emp.c0317Q_SI, emp.c0317H_SI, emp.c0317Y_SI, emp.c0310Y_HB, emp.c0310Y_AB, emp.c0413M_TB)",
+      "message": "Tổng trích ≠ tổng các khoản thưởng của bảng nhân viên"
+    }
+  ],
+  "extraSheets": []
+}

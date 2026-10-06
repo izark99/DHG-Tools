@@ -22,12 +22,18 @@ export interface InputDef {
   /** Preferred sheet name; empty = the sheet whose headers match best. */
   sheet?: string;
   fields: InputField[];
+  /**
+   * Per-row computed fields (evaluated in order on every row of this input).
+   * `in.<thisInput>.<field>` is the current row; other inputs give the first row of the same employee.
+   */
+  computed?: { id: string; label?: string; formula: string; type: 'number' | 'text' }[];
 }
 
 export interface RunParamDef {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'master';
+  /** master: pick a row of `table` (value = key column); costItem: pick a cost item of this flow (value = helper). */
+  type: 'text' | 'number' | 'date' | 'master' | 'costItem';
   required?: boolean;
   /** For type "master": table to pick a row from (value = key column). */
   table?: string;
@@ -58,7 +64,10 @@ export interface CostItem {
   periodType: PeriodType;
   /** A column of the CostCenter table (looked up per unit) or a literal budget code. */
   budget: string;
-  /** Employee-table column with the amount. */
+  /**
+   * Employee-table column with the amount. Blank = catalogue entry: not summed on its own, used when
+   * another item's `helperColumn` sends an amount to this helper (name, cost code, budget, period come from here).
+   */
   amount: string;
   /** Employee-table column with the employee-side amount (IN), optional. */
   employeeAmount?: string | null;
@@ -99,6 +108,8 @@ export interface FormColumn {
   /** Include in the Total row (number columns; default true). */
   total?: boolean;
   hideIfZeroTotal?: boolean;
+  /** Working column: computed (usable by later columns and checks) but never printed. */
+  hidden?: boolean;
   width?: number;
 }
 
@@ -107,17 +118,35 @@ export interface SignatureRole {
   titleEn?: string;
   /** Run parameter holding the signer's name (optional). */
   nameParam?: string;
+  /** Fixed name when there is no run parameter (optional). */
+  name?: string;
 }
+
+export type FooterBlock =
+  | { kind: 'text'; lines: string[]; align?: 'left' | 'right' }
+  | { kind: 'signatures'; roles: SignatureRole[] };
 
 export interface FormLayout {
   sheetName: string;
   companyName: string;
-  /** Templates: {MM} {M} {YYYY} {Q} {H} and {<run param id>} */
+  /**
+   * Text templates: {MM} {M} {YYYY} {Q} {QQ} {H} {FLOW} {<run param id>} and {=formula}
+   * (a formula in total scope, e.g. {=UPPER(ITEM(run.cost,"nameVi"))}).
+   */
   titleVi: string;
   titleEn: string;
+  /** Lines between the company name and the title (e.g. "Đơn vị: {group}"). */
+  preLines?: string[];
+  /** Lines after the title. */
   extraLines?: string[];
   placeDate?: string;
   signatures: SignatureRole[];
+  /** Blocks under the first signature row: review text, further signature rows. */
+  footer?: FooterBlock[];
+  orientation?: 'portrait' | 'landscape';
+  /** Total row above the header rows (top) or under the data (bottom, default). */
+  totalPosition?: 'top' | 'bottom';
+  totalLabel?: string;
 }
 
 export type LedgerSheet = 'accrual' | 'actual' | 'none';

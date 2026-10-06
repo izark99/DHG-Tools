@@ -23,6 +23,8 @@ export interface Env {
   lookup(table: string, key: Value): Record<string, Scalar> | undefined;
   /** Employee rows of the current form row's unit (UNITSUM). */
   unitEmployees?(): Env[];
+  /** Employees that make up the current aggregated row (ROWSUM). */
+  rowEmployees?(): Env[];
   /** Form rows of the current form row's unit (UNITCOUNT). */
   unitPeers?(): Env[];
   /** All rows of the current scope (COUNTSAME). */
@@ -31,6 +33,10 @@ export interface Env {
   cc?(column: string): Value;
   /** Cache shared by all rows of one scope (COUNTSAME). */
   memo?: Map<unknown, unknown>;
+  /** Field of a cost item of the flow (ITEM). */
+  item?(helper: string, field: string): Value;
+  /** LET variables. */
+  vars?: Map<string, Value>;
 }
 
 export function keyOf(v: Value): string {
@@ -53,6 +59,11 @@ export function toNum(v: Value): number {
   if (typeof v === 'boolean') return v ? 1 : 0;
   const s = v.trim().replace(/,/g, '');
   if (s === '') return 0;
+  const frac = /^(-?)(\d+)\s+(\d+)\/(\d+)$/.exec(s); // Excel VALUE("0 1/6")
+  if (frac && Number(frac[4]) !== 0) {
+    const x = Number(frac[2]) + Number(frac[3]) / Number(frac[4]);
+    return frac[1] ? -x : x;
+  }
   const n = Number(s);
   if (!Number.isFinite(n)) throw new FormulaError(`Không phải số: "${v}"`);
   return n;
@@ -329,8 +340,9 @@ export const FUNCTIONS: Record<string, FnSpec> = {
     impl: (a, env, ev) => {
       const table = str(a[0], env, ev);
       const row = env.lookup(table, ev(a[1], env));
-      const col = str(a[2], env, ev);
-      if (row && col in row) {
+      const want = str(a[2], env, ev);
+      const col = row ? (want in row ? want : Object.keys(row).find((k) => k.trim().toUpperCase() === want.trim().toUpperCase())) : undefined;
+      if (row && col !== undefined) {
         const v = row[col];
         if (v !== null && v !== '') return v;
       }
@@ -366,6 +378,17 @@ export const FUNCTIONS: Record<string, FnSpec> = {
       if (!env.unitEmployees) throw new FormulaError('UNITSUM chỉ dùng trong cột của Form');
       let s = 0;
       for (const e of env.unitEmployees()) s += toNum(ev(a[0], e));
+      return s;
+    },
+  },
+  ROWSUM: {
+    min: 1,
+    max: 1,
+    scopes: ['form'],
+    impl: (a, env, ev) => {
+      if (!env.rowEmployees) throw new FormulaError('ROWSUM chỉ dùng trong cột của Form');
+      let s = 0;
+      for (const e of env.rowEmployees()) s += toNum(ev(a[0], e));
       return s;
     },
   },
@@ -414,6 +437,10 @@ export function evaluate(node: Node, env: Env): Value {
       return node.v;
     case 'col':
       return env.column(node.id);
+    case 'name': {
+      if (env.vars?.has(node.id)) return env.vars.get(node.id)!;
+      throw new FormulaError(`Tên không xác định "${node.id}" (chỉ dùng được bên trong LET)`, node.pos);
+    }
     case 'ref':
       return env.ref(node.ns, node.path, 'value');
     case 'un': {
@@ -470,3 +497,271 @@ export function evaluate(node: Node, env: Env): Value {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Excel-compatible additions used by the workbook translations.
+
+/** Value(s) of a range argument: references are read as arrays (all rows in scope). */
+function evalRange(n: Node, env: Env, ev: Ev): Scalar[] {
+  if (n.k === 'ref') {
+    const v = env.ref(n.ns, n.path, 'all');
+    return Array.isArray(v) ? flatten(v) : [v];
+  }
+  const v = ev(n, env);
+  return Array.isArray(v) ? flatten(v) : [v];
+}
+
+function wildcardRegex(pattern: string): RegExp {
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '~' && i + 1 < pattern.length) re += pattern[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    else if (c === '*') re += '.*';
+    else if (c === '?') re += '.';
+    else re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`, 'is');
+}
+
+/** Excel SUMIFS / COUNTIFS criterion: 5, "5", ">5", "<>x", "abc*", "" (blank), "<>" (non-blank). */
+export function criterion(crit: Value): (v: Scalar) => boolean {
+  const c = scalar(crit);
+  if (typeof c === 'number' || typeof c === 'boolean') return (v) => v !== null && v !== '' && compare(v, c) === 0 || (typeof c === 'number' && typeof v === 'string' && v.trim() !== '' && Number(v) === c);
+  const s = c ?? '';
+  const m = /^(<=|>=|<>|<|>|=)?(.*)$/s.exec(s)!;
+  const op = m[1] ?? '=';
+  const rest = m[2];
+  const blank = (v: Scalar) => v === null || v === '';
+  if (rest === '') {
+    if (op === '=') return blank;
+    if (op === '<>') return (v) => !blank(v);
+  }
+  const num = rest.trim() !== '' && Number.isFinite(Number(rest)) ? Number(rest) : null;
+  if (op === '<' || op === '>' || op === '<=' || op === '>=') {
+    return (v) => {
+      if (blank(v)) return false;
+      let d: number;
+      if (num !== null) {
+        if (typeof v !== 'number') return false;
+        d = v - num;
+      } else {
+        if (typeof v !== 'string') return false;
+        d = compare(v, rest);
+      }
+      return op === '<' ? d < 0 : op === '>' ? d > 0 : op === '<=' ? d <= 0 : d >= 0;
+    };
+  }
+  const eq: (v: Scalar) => boolean =
+    num !== null
+      ? (v) => (typeof v === 'number' ? v === num : typeof v === 'string' && v.trim() !== '' && Number(v) === num)
+      : /[*?~]/.test(rest)
+        ? ((re) => (v: Scalar) => !blank(v) && re.test(toStr(v)))(wildcardRegex(rest))
+        : (v) => toStr(v).toUpperCase() === rest.toUpperCase();
+  return op === '<>' ? (v) => !eq(v) : eq;
+}
+
+function ifsArgs(a: Node[], env: Env, ev: Ev, start: number): Scalar[][] {
+  const ranges: Scalar[][] = [];
+  const tests: ((v: Scalar) => boolean)[] = [];
+  for (let i = start; i + 1 < a.length; i += 2) {
+    ranges.push(evalRange(a[i], env, ev));
+    tests.push(criterion(ev(a[i + 1], env)));
+  }
+  if ((a.length - start) % 2) throw new FormulaError('Thiếu điều kiện (cặp vùng / điều kiện)');
+  const n = ranges[0]?.length ?? 0;
+  if (ranges.some((r) => r.length !== n)) throw new FormulaError('Các vùng điều kiện phải cùng số dòng (cùng một input)');
+  const keep: Scalar[][] = [];
+  for (let r = 0; r < n; r++) if (tests.every((t, k) => t(ranges[k][r]))) keep.push(ranges.map((x) => x[r]));
+  return keep.length ? [keep.map((_, i) => i as unknown as Scalar)] : [[]];
+}
+
+const SERIAL0 = Date.UTC(1899, 11, 30);
+const toDate = (serial: number) => new Date(SERIAL0 + Math.round(serial) * 86400000);
+const toSerial = (y: number, m: number, d: number) => Math.round((Date.UTC(y, m - 1, d) - SERIAL0) / 86400000);
+
+Object.assign(FUNCTIONS, {
+  SUMIFS: {
+    min: 3,
+    max: 255,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const sum = evalRange(a[0], env, ev);
+      const ranges: Scalar[][] = [];
+      const tests: ((v: Scalar) => boolean)[] = [];
+      if ((a.length - 1) % 2) throw new FormulaError('SUMIFS: thiếu điều kiện');
+      for (let i = 1; i + 1 < a.length; i += 2) {
+        ranges.push(evalRange(a[i], env, ev));
+        tests.push(criterion(ev(a[i + 1], env)));
+      }
+      if (ranges.some((r) => r.length !== sum.length)) throw new FormulaError('SUMIFS: các vùng phải cùng số dòng (cùng một input)');
+      let s = 0;
+      for (let r = 0; r < sum.length; r++) if (tests.every((t, k) => t(ranges[k][r]))) s += typeof sum[r] === 'number' ? (sum[r] as number) : 0;
+      return finite(s);
+    },
+  },
+  COUNTIFS: {
+    min: 2,
+    max: 254,
+    impl: (a: Node[], env: Env, ev: Ev) => ifsArgs(a, env, ev, 0)[0].length,
+  },
+  SUBSTITUTE: {
+    min: 3,
+    max: 4,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const s = str(a[0], env, ev);
+      const from = str(a[1], env, ev);
+      const to = str(a[2], env, ev);
+      if (!from) return s;
+      if (!a[3]) return s.split(from).join(to);
+      const nth = num(a[3], env, ev);
+      let idx = -1;
+      for (let k = 0; k < nth; k++) {
+        idx = s.indexOf(from, idx + 1);
+        if (idx < 0) return s;
+      }
+      return s.slice(0, idx) + to + s.slice(idx + from.length);
+    },
+  },
+  TEXTBEFORE: {
+    min: 2,
+    max: 3,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const s = str(a[0], env, ev);
+      const d = str(a[1], env, ev);
+      const n = a[2] ? num(a[2], env, ev) : 1;
+      const parts = s.split(d);
+      if (parts.length <= n) throw new FormulaError('TEXTBEFORE: không thấy dấu phân cách (#N/A)');
+      return parts.slice(0, n).join(d);
+    },
+  },
+  TEXTAFTER: {
+    min: 2,
+    max: 3,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const s = str(a[0], env, ev);
+      const d = str(a[1], env, ev);
+      const n = a[2] ? num(a[2], env, ev) : 1;
+      const parts = s.split(d);
+      if (parts.length <= n) throw new FormulaError('TEXTAFTER: không thấy dấu phân cách (#N/A)');
+      return parts.slice(n).join(d);
+    },
+  },
+  PROPER: {
+    min: 1,
+    max: 1,
+    impl: (a: Node[], env: Env, ev: Ev) => str(a[0], env, ev).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toUpperCase()),
+  },
+  TEXTJOIN: {
+    min: 3,
+    max: 255,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const d = str(a[0], env, ev);
+      const skip = toBool(ev(a[1], env));
+      const vals = flatten(a.slice(2).map((x) => ev(x, env))).map(toStr);
+      return (skip ? vals.filter((v) => v !== '') : vals).join(d);
+    },
+  },
+  CONCAT: { min: 1, max: 255, impl: (a: Node[], env: Env, ev: Ev) => flatten(a.map((x) => ev(x, env))).map(toStr).join('') },
+  ISERROR: {
+    min: 1,
+    max: 1,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      try {
+        ev(a[0], env);
+        return false;
+      } catch (e) {
+        if (e instanceof FormulaError) return true;
+        throw e;
+      }
+    },
+  },
+  ISTEXT: {
+    min: 1,
+    max: 1,
+    impl: (a: Node[], env: Env, ev: Ev) => typeof scalar(ev(a[0], env)) === 'string',
+  },
+  ISNUMBER: {
+    min: 1,
+    max: 1,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      try {
+        return typeof scalar(ev(a[0], env)) === 'number';
+      } catch (e) {
+        if (e instanceof FormulaError) return false;
+        throw e;
+      }
+    },
+  },
+  DATE: { min: 3, max: 3, impl: (a: Node[], env: Env, ev: Ev) => toSerial(num(a[0], env, ev), num(a[1], env, ev), num(a[2], env, ev)) },
+  EOMONTH: {
+    min: 2,
+    max: 2,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      const d = toDate(num(a[0], env, ev));
+      const m = d.getUTCMonth() + Math.trunc(num(a[1], env, ev));
+      return toSerial(d.getUTCFullYear(), m + 2, 0);
+    },
+  },
+  TODAY: {
+    min: 0,
+    max: 0,
+    impl: () => {
+      const d = new Date();
+      return toSerial(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    },
+  },
+  YEAR: { min: 1, max: 1, impl: (a: Node[], env: Env, ev: Ev) => toDate(num(a[0], env, ev)).getUTCFullYear() },
+  MONTH: { min: 1, max: 1, impl: (a: Node[], env: Env, ev: Ev) => toDate(num(a[0], env, ev)).getUTCMonth() + 1 },
+  DAY: { min: 1, max: 1, impl: (a: Node[], env: Env, ev: Ev) => toDate(num(a[0], env, ev)).getUTCDate() },
+  GROUPCOUNT: {
+    min: 2,
+    max: 2,
+    scopes: ['employee', 'form'],
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      if (!env.scopeRows) throw new FormulaError('GROUPCOUNT không dùng được ở đây');
+      const vk = (v: Value) => {
+        const x = scalar(v);
+        return typeof x === 'number' ? `n${x}` : typeof x === 'boolean' ? `b${x}` : `s${(x ?? '').toUpperCase()}`;
+      };
+      const memoKey = a[0];
+      let byCond = env.memo?.get(memoKey) as Map<Node, Map<string, number>> | undefined;
+      if (!byCond) {
+        byCond = new Map();
+        env.memo?.set(memoKey, byCond);
+      }
+      let counts = byCond.get(a[1]);
+      if (!counts) {
+        counts = new Map();
+        for (const e of env.scopeRows()) {
+          if (!toBool(ev(a[1], e))) continue;
+          const k = vk(ev(a[0], e));
+          counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        byCond.set(a[1], counts);
+      }
+      return counts.get(vk(ev(a[0], env))) ?? 0;
+    },
+  },
+  LET: {
+    min: 3,
+    max: 255,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      if (a.length % 2 === 0) throw new FormulaError('LET cần các cặp (tên, giá trị) và một biểu thức cuối');
+      const vars = new Map(env.vars ?? []);
+      const child: Env = Object.assign(Object.create(env) as Env, { vars });
+      for (let i = 0; i + 1 < a.length; i += 2) {
+        const nm = a[i];
+        if (nm.k !== 'name') throw new FormulaError('LET: tên biến phải là chữ không dấu chấm, ví dụ x');
+        vars.set(nm.id, ev(a[i + 1], child));
+      }
+      return ev(a[a.length - 1], child);
+    },
+  },
+  ITEM: {
+    min: 2,
+    max: 2,
+    impl: (a: Node[], env: Env, ev: Ev) => {
+      if (!env.item) throw new FormulaError('ITEM không dùng được ở đây');
+      return env.item(str(a[0], env, ev), str(a[1], env, ev));
+    },
+  },
+} satisfies Record<string, FnSpec>);

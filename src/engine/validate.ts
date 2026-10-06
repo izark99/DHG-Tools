@@ -64,7 +64,7 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
   dupCheck(cfg.inputs.map((i) => i.id), 'inputs', 'Input');
   const inputs: Record<string, string[]> = {};
   cfg.inputs.forEach((inp, i) => {
-    const fields = (inp.fields ?? []).map((f) => f.id);
+    const fields = [...(inp.fields ?? []).map((f) => f.id), ...(inp.computed ?? []).map((c) => c.id)];
     dupCheck(fields, `inputs[${i}].fields`, `Field của ${inp.id}`);
     inputs[inp.id] = fields;
     if (!fields.includes(inp.key)) err(`inputs[${i}].key`, `Input "${inp.id}": field khoá "${inp.key}" không tồn tại`);
@@ -77,12 +77,17 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
   dupCheck(cfg.runParams.map((p) => p.id), 'runParams', 'Tham số');
   cfg.runParams.forEach((p, i) => {
     if (RESERVED_RUN.includes(p.id)) err(`runParams[${i}]`, `"${p.id}" là tham số có sẵn, không khai báo lại`);
+    if (!['text', 'number', 'date', 'master', 'costItem'].includes(p.type)) err(`runParams[${i}]`, `Kiểu "${p.type}" không hợp lệ`);
     if (p.type === 'master' && vctx.tables && !(p.table && vctx.tables[p.table]))
       err(`runParams[${i}]`, `Tham số "${p.id}": không có bảng master "${p.table ?? ''}"`);
   });
   const run = [...RESERVED_RUN, ...cfg.runParams.map((p) => p.id)];
 
   const at = (site: FormulaSite): ScopeInfo => scopeFor(cfg, vctx, site);
+  const checkTemplate = (path: string, text: string | undefined) => {
+    if (!text) return;
+    for (const m of text.matchAll(/\{=([^{}]*)\}/g)) for (const e of analyzeFormula(m[1], at({ kind: 'template' })).errors) err(path, `{=${m[1]}}: ${e}`);
+  };
   const check = (path: string, formula: string | null | undefined, info: ScopeInfo, required = true) => {
     if (formula === null || formula === undefined || !String(formula).trim()) {
       if (required) err(path, 'Thiếu công thức');
@@ -90,6 +95,14 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
     }
     for (const m of analyzeFormula(String(formula), info).errors) err(path, m);
   };
+
+  // computed input fields
+  cfg.inputs.forEach((inp, i) =>
+    (inp.computed ?? []).forEach((c, j) => {
+      if (!['number', 'text'].includes(c.type)) err(`inputs[${i}].computed[${j}]`, 'Kiểu phải là number / text');
+      check(`inputs[${i}].computed[${j}] (${c.id})`, c.formula, at({ kind: 'inputComputed' }));
+    }),
+  );
 
   // employee table
   const et = cfg.employeeTable;
@@ -111,7 +124,7 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
     if (!c.costCode) err(p, 'Thiếu Cost Code');
     if (!['M', 'Q', 'H', 'Y'].includes(c.periodType)) err(p, 'Loại kỳ phải là M/Q/H/Y');
     if (!c.budget) err(p, 'Thiếu Budget');
-    if (!empCols.includes(c.amount)) err(p, `Cột số tiền "${c.amount}" không có trong bảng nhân viên`);
+    if (c.amount && !empCols.includes(c.amount)) err(p, `Cột số tiền "${c.amount}" không có trong bảng nhân viên`);
     check(p, c.unitFilter, at({ kind: 'unitFilter' }), false);
     for (const k of ['employeeAmount', 'helperColumn', 'costCenterColumn'] as const) {
       const v = c[k];
@@ -147,9 +160,22 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
       else if (col.type !== 'number') err(`forms.${id}.ledgerFeed`, `Cột ghi vào ledger "${feed.amountColumn}" phải là số`);
     }
     if (!f.layout?.sheetName) err(`forms.${id}.layout`, 'Thiếu tên sheet');
-    f.layout?.signatures?.forEach((s, i) => {
-      if (s.nameParam && !run.includes(s.nameParam)) err(`forms.${id}.layout.signatures[${i}]`, `Tham số "${s.nameParam}" không tồn tại`);
+    const L = f.layout;
+    const roles = [...(L?.signatures ?? []), ...(L?.footer ?? []).flatMap((b) => (b.kind === 'signatures' ? b.roles : []))];
+    roles.forEach((s) => {
+      if (s.nameParam && !run.includes(s.nameParam)) err(`forms.${id}.layout`, `Chữ ký "${s.title}": tham số "${s.nameParam}" không tồn tại`);
     });
+    const texts = [
+      L?.companyName,
+      L?.titleVi,
+      L?.titleEn,
+      L?.placeDate,
+      ...(L?.preLines ?? []),
+      ...(L?.extraLines ?? []),
+      ...(L?.footer ?? []).flatMap((b) => (b.kind === 'text' ? b.lines : [])),
+      ...roles.flatMap((r) => [r.title, r.titleEn]),
+    ];
+    for (const t of texts) checkTemplate(`forms.${id}.layout`, t);
   };
   checkForm('form02', cfg.forms.form02);
   checkForm('form03', cfg.forms.form03);
@@ -172,5 +198,6 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
   );
 
   if (!cfg.fileName) err('fileName', 'Thiếu mẫu tên file');
+  else checkTemplate('fileName', cfg.fileName);
   return errs;
 }
