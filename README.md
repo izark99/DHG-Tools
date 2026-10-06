@@ -71,7 +71,11 @@ ADMIN_PASSWORD=... npm run test:e2e        # Chromium: tạo/publish/rollback fl
 2. **Admin** tạo flow trong **Flows** → sửa các tab (Inputs, Tham số chạy, Bảng nhân viên, Cost items, Tổng hợp,
    Form 02/03, Kiểm tra, Sheet thêm) → **Lưu nháp** → **Chạy thử** → **Publish**. Config còn lỗi công thức
    không publish được; publish hỏi kỳ bắt đầu hiệu lực (xem mục 4). Rollback = publish lại phiên bản cũ.
-3. **User** chọn flow → nhập kỳ, tham số → tải file lương (+ file ledger mới nhất) → **Tính** → xem lỗi/kiểm tra,
+3. **User** chọn flow → nhập kỳ, **chọn đợt chạy** (flow có cả trích lẫn chi luôn hỏi, không chọn sẵn):
+   **Trích** (cuối kỳ, xuất Form 02, ghi phần trích vào ledger), **Chi** (vài ngày sau khi chi thực tế, xuất
+   Form 03, ghi phần chi và giữ nguyên phần trích đã ghi) hoặc **Trích + Chi** (cùng lúc, cả hai form). File
+   xuất có hậu tố `_Trich` / `_Chi`. Đợt của mỗi form và cách ghi ledger (accrual / actual / actual = accrual)
+   do admin đặt trong tab Form 02 / Form 03 → tham số → tải file lương (+ file ledger mới nhất) → **Tính** → xem lỗi/kiểm tra,
    preview → **Tải Form + Ledger** (một thao tác tải cả hai file). Lưu file ledger mới vào thư mục chung;
    lần chạy sau app so hash và cảnh báo nếu dùng file cũ.
 4. **Hiệu lực theo kỳ (version)**: flow và master data đều có phiên bản. Publish flow hoặc lưu bảng master luôn

@@ -75,7 +75,9 @@ Team C&B cần chốt các giá trị này trước khi chạy song song.
 - Mức đóng BH bị giới hạn ở 20 × LCS (BHTN dùng TTV).
 - 0312 / 0313 / 0315 chỉ trích (Form 02). 0314 KPCĐ chỉ chi (Form 03). Mỗi khoản có phần NLĐ (`employeeAmount`).
 - Có sheet Summary riêng.
-- `adjust = false`, không ghi ledger chi. **Điểm mở PLAN §2.**
+- Đã chốt: **Actual = Accrual**. Cả hai form ghi ledger dạng `both` (dòng trích và dòng chi cùng số tiền), nên
+  số dư luôn bằng 0 và không có điều chỉnh (`adjust = false`). Form 03 (KPCĐ) cũng thuộc đợt **Trích**, nên một
+  lần chạy ra cả hai form.
 
 **OI**
 - 62 khoản chi trong danh mục. Khoản cụ thể được chọn lúc chạy (tham số `cost`, kiểu `costItem`).

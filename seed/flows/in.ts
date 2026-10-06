@@ -98,8 +98,9 @@ export const IN: FlowConfig = {
       enabled: true,
       prefix: '',
       rowFilter: null,
-      adjust: false, // PLAN §2: IN's payment side is still to be defined
-      ledgerFeed: { sheet: 'none', amountColumn: 'accrual' },
+      // IN is paid exactly as accrued: the ledger gets actual = accrual, nothing to adjust later
+      adjust: false,
+      ledgerFeed: { sheet: 'both', amountColumn: 'accrual' },
       columns: [...keyColumns(), ...amountColumns],
       layout: accrualLayout(
         'Form 02 - Print',
@@ -110,10 +111,12 @@ export const IN: FlowConfig = {
     },
     form03: {
       enabled: true,
+      // the trade-union fund form is an accrual too: one run gives both forms
+      phase: 'accrual',
       prefix: '',
       rowFilter: null,
       adjust: false,
-      ledgerFeed: { sheet: 'none', amountColumn: 'accrual' },
+      ledgerFeed: { sheet: 'both', amountColumn: 'accrual' },
       columns: [...keyColumns(), ...amountColumns],
       layout: accrualLayout(
         'Form 03 - Print',

@@ -1,4 +1,5 @@
 import { api, type User } from '../api';
+import { RUN_MODE_LABEL } from '../engine/types';
 import { Alert, useAsync } from './common';
 import { Icon, PageHeader } from './layout';
 import { Guide, T } from './texts';
@@ -71,7 +72,9 @@ export function Home({ user }: { user: User }) {
                 <span className={f.published ? 'pill pill-ok' : 'pill'}>{f.published ? `v${f.published.version}` : 'chưa publish'}</span>
               </div>
               <div className="flow-name">{f.name}</div>
-              <div className="flow-meta">{r ? `Lần chạy gần nhất: kỳ ${r.period} · ${r.user} · ${new Date(r.at).toLocaleDateString('vi-VN')}` : 'Chưa chạy lần nào'}</div>
+              <div className="flow-meta">{r
+                  ? `Lần chạy gần nhất: kỳ ${r.period}${r.mode && r.mode !== 'both' ? ` (${RUN_MODE_LABEL[r.mode]})` : ''} · ${r.user} · ${new Date(r.at).toLocaleDateString('vi-VN')}`
+                  : 'Chưa chạy lần nào'}</div>
               <div className="flow-card-foot">
                 {f.published ? (
                   <a className="button primary" href={`#/run/${encodeURIComponent(f.id)}`}>

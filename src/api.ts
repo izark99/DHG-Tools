@@ -72,6 +72,7 @@ export interface UserRow {
 }
 
 export interface RunLogRow {
+  mode?: 'accrual' | 'payment' | 'both' | null;
   flow_id: string;
   flow_version: number | null;
   period: string;
@@ -158,8 +159,8 @@ export const api = {
   putLedgerMark: (ledger: string, last_period: string, file_hash: string) => call('PUT', `/api/ledger-marks/${enc(ledger)}`, { last_period, file_hash }),
 
   runs: () => call<{ latest: RunLogRow[] }>('GET', '/api/runs'),
-  logRun: (flow_id: string, flow_version: number | null, period: string, master_versions: Record<string, number>) =>
-    call('POST', '/api/runs', { flow_id, flow_version, period, master_versions }),
+  logRun: (flow_id: string, flow_version: number | null, period: string, master_versions: Record<string, number>, mode: 'accrual' | 'payment' | 'both') =>
+    call('POST', '/api/runs', { flow_id, flow_version, period, master_versions, mode }),
 
   backup: () => call<unknown>('GET', '/api/backup'),
   importBackup: (data: unknown) => call<{ ok: true; masters: number; masterVersions: number; flows: number; texts: number }>('POST', '/api/backup', data),

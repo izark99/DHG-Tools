@@ -194,11 +194,15 @@ describe('browser end-to-end', () => {
   });
 
   let ledger1 = '';
+  let ledger2 = '';
   it('runs the flow end to end and downloads Form 02/03 + ledger', async () => {
     await page.goto(`${BASE}/#/run/${FLOW}`);
     await page.getByLabel('Tháng').selectOption('9');
     await page.getByLabel('Năm').fill('2026');
     await page.getByLabel('Người lập').fill('Nguyễn Văn A');
+    // a two-stage flow asks for the stage first; nothing is preselected
+    expect(await page.getByRole('radio', { checked: true }).count()).toBe(0);
+    await page.getByRole('radio', { name: /^Trích \+ Chi/ }).click();
     await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
     await page.getByText(/3 dòng · sheet/).waitFor();
     await page.getByRole('button', { name: 'Tính' }).click();
@@ -224,6 +228,7 @@ describe('browser end-to-end', () => {
     await page.goto(`${BASE}/#/run/${FLOW}`);
     await page.getByLabel('Tháng').selectOption('10');
     await page.getByLabel('Năm').fill('2026');
+    await page.getByRole('radio', { name: /^Trích \+ Chi/ }).click();
     await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
     // no ledger chosen while one exists → blocking confirmation
     await page.getByText('mất toàn bộ lịch sử điều chỉnh').waitFor();
@@ -235,7 +240,7 @@ describe('browser end-to-end', () => {
     await page.getByRole('tab', { name: /^Form 02/ }).click();
     // quarterly bonus accrued in 09 but never paid → adjusted -2,000,000 in 10
     await page.getByRole('cell', { name: '-2,000,000' }).first().waitFor();
-    await downloadsOf(2, () => page.getByRole('button', { name: 'Tải Form + Ledger' }).click());
+    ledger2 = (await downloadsOf(2, () => page.getByRole('button', { name: 'Tải Form + Ledger' }).click())).find((p) => p.includes('Ledger_'))!;
 
     // using the period-09 ledger again is now stale
     await page.goto(`${BASE}/#/`);
@@ -270,6 +275,7 @@ describe('browser end-to-end', () => {
     await page.goto(`${BASE}/#/`);
     await page.goto(`${BASE}/#/run/${FLOW}`);
     await page.getByLabel('Tháng').selectOption('11');
+    await page.getByRole('radio', { name: /^Trích \+ Chi/ }).click();
     await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
     await page.getByText(/3 dòng · sheet/).waitFor();
     // ledger warning must be confirmed (a ledger exists but none chosen)
@@ -300,6 +306,51 @@ describe('browser end-to-end', () => {
       expect(now, `page ${h}`).toBe(nref);
       if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/page-${h.replace(/[#/]/g, '') || 'home'}.png` });
     }
+  });
+
+  it('accrual run, then the payment run days later: Form 02, then Form 03; the ledger keeps the accrual', async () => {
+    const sheets = async (file: string) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(readFileSync(file) as unknown as ArrayBuffer);
+      return wb;
+    };
+    const run = async (stage: RegExp, ledgerFile: string) => {
+      await page.goto(`${BASE}/#/`);
+      await page.goto(`${BASE}/#/run/${FLOW}`);
+      await page.getByLabel('Năm').fill('2026');
+      await page.getByLabel('Tháng').selectOption('11');
+      await page.getByLabel('Người lập').fill('Nguyễn Văn A');
+      await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
+      await page.locator('.input-block').nth(1).locator('input[type=file]').setInputFiles(ledgerFile);
+      await page.getByText(/dòng trích/).waitFor();
+      expect(await page.getByRole('button', { name: 'Tính' }).isDisabled()).toBe(true); // stage not chosen yet
+      await page.getByRole('radio', { name: stage }).click();
+      expect(await page.getByText('Thay thế dữ liệu cũ của kỳ này').count()).toBe(0);
+      await page.getByRole('button', { name: 'Tính' }).click();
+      await page.getByText('Kết quả — kỳ 2026-11').waitFor();
+      return downloadsOf(2, () => page.getByRole('button', { name: 'Tải Form + Ledger' }).click());
+    };
+    const acc = await run(/^Trích ·/, ledger2);
+    const accForm = acc.find((p) => p.includes('Form_'))!;
+    expect(accForm).toMatch(/_Trich\.xlsx$/);
+    expect((await sheets(accForm)).worksheets.map((w) => w.name)).toEqual(['Form 02']);
+    const accLedger = acc.find((p) => p.includes('Ledger_'))!;
+    const rows = (wb: ExcelJS.Workbook, sheet: string) => {
+      const out: string[] = [];
+      wb.getWorksheet(sheet)!.eachRow((r, i) => i > 1 && String(r.getCell(1).value) === '2026-11' && out.push(String(r.getCell(9).value)));
+      return out;
+    };
+    const l1 = await sheets(accLedger);
+    expect(rows(l1, 'accrual').length).toBeGreaterThan(0);
+    expect(rows(l1, 'actual').length).toBe(0);
+
+    const pay = await run(/^Chi ·/, accLedger);
+    const payForm = pay.find((p) => p.includes('Form_'))!;
+    expect(payForm).toMatch(/_Chi\.xlsx$/);
+    expect((await sheets(payForm)).worksheets.map((w) => w.name)).toEqual(['Form 03']);
+    const l2 = await sheets(pay.find((p) => p.includes('Ledger_'))!);
+    expect(rows(l2, 'accrual')).toEqual(rows(l1, 'accrual'));
+    expect(rows(l2, 'actual').length).toBeGreaterThan(0);
   });
 
   it('no request carries payroll rows, and nothing goes to another origin', async () => {

@@ -3,6 +3,7 @@ import type { FormOut, Issue, RunResult } from '../engine/run';
 import type { FlowConfig, Scalar } from '../engine/types';
 import { Alert, DataTable, Tabs, type GridColumn, type TabDef } from './common';
 import { Card } from './layout';
+import { RUN_MODE_LABEL } from '../engine/types';
 
 export function IssueList({ issues }: { issues: Issue[] }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -69,7 +70,7 @@ export function Preview({ config, result }: { config: FlowConfig; result: RunRes
   const empRows = useMemo(() => result.employees.map((e) => ({ _key: e.key, ...e.values })), [result]);
 
   return (
-    <Card step={4} title={`Kết quả — kỳ ${result.period}`} className="result-card">
+    <Card step={4} title={`Kết quả — kỳ ${result.period}${result.mode !== 'both' ? ` · ${RUN_MODE_LABEL[result.mode]}` : ''}`} className="result-card">
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       <div className="tab-panel">
         {tab === 'issues' && <IssueList issues={result.issues} />}

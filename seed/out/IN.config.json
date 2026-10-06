@@ -392,7 +392,7 @@
       "rowFilter": null,
       "adjust": false,
       "ledgerFeed": {
-        "sheet": "none",
+        "sheet": "both",
         "amountColumn": "accrual"
       },
       "columns": [
@@ -543,11 +543,12 @@
     },
     "form03": {
       "enabled": true,
+      "phase": "accrual",
       "prefix": "",
       "rowFilter": null,
       "adjust": false,
       "ledgerFeed": {
-        "sheet": "none",
+        "sheet": "both",
         "amountColumn": "accrual"
       },
       "columns": [

@@ -179,3 +179,49 @@ describe('ledger across 3 periods where payment ≠ accrual', () => {
     expect(res.form02!.rows).toEqual([]);
   });
 });
+
+describe('accrual and payment as two runs of the same period', () => {
+  const cfg = config();
+  const go = (mode: 'accrual' | 'payment' | 'both', ledger: Ledger, month = 9) =>
+    runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month, year: 2026, preparer: 'X' }, ledger, mode });
+
+  it('the accrual run builds Form 02 only and skips the checks about Form 03', () => {
+    const r = go('accrual', emptyLedger());
+    expect(r.form02).not.toBeNull();
+    expect(r.form03).toBeNull();
+    expect(r.issues.map((i) => i.source)).not.toContain('pit_total');
+    expect(r.ledgerOut!.accrual.length).toBe(7);
+    expect(r.ledgerOut!.actual.length).toBe(0);
+    expect(r.fileName).toMatch(/_Trich\.xlsx$/);
+  });
+
+  it('the payment run days later adds the actual rows and keeps the accrual of the period', () => {
+    const accrued = go('accrual', emptyLedger()).ledgerOut!;
+    const r = go('payment', accrued);
+    expect(r.form02).toBeNull();
+    expect(r.form03).not.toBeNull();
+    expect(r.ledgerOut!.accrual).toEqual(accrued.accrual);
+    expect(r.ledgerOut!.actual.length).toBeGreaterThan(0);
+    expect(r.fileName).toMatch(/_Chi\.xlsx$/);
+    // the same ledger as one run of both stages
+    const both = go('both', emptyLedger());
+    expect(r.ledgerOut!.accrual).toEqual(both.ledgerOut!.accrual);
+    expect(r.ledgerOut!.actual).toEqual(both.ledgerOut!.actual);
+    expect(both.fileName).not.toMatch(/_(Trich|Chi)\.xlsx$/);
+    // re-running the payment replaces only the actual rows
+    const again = go('payment', r.ledgerOut!);
+    expect(again.ledgerOut!.actual).toEqual(r.ledgerOut!.actual);
+    expect(again.ledgerOut!.accrual).toEqual(accrued.accrual);
+  });
+
+  it('ledger feed "both": actual = accrual, so the next period has nothing to adjust', () => {
+    const c = config();
+    c.forms.form02.ledgerFeed = { sheet: 'both', amountColumn: 'accrual' };
+    c.forms.form03.enabled = false;
+    const r = runFlow({ config: c, masters, inputs: parsed(c, EMPS), run: { month: 9, year: 2026, preparer: 'X' }, ledger: emptyLedger() });
+    const l = r.ledgerOut!;
+    expect(l.actual.map((x) => x.amount)).toEqual(l.accrual.map((x) => x.actualAccrual));
+    const next = runFlow({ config: c, masters, inputs: parsed(c, EMPS), run: { month: 10, year: 2026, preparer: 'X' }, ledger: l });
+    expect(next.form02!.rows.every((x) => x.row.adjusted === 0)).toBe(true);
+  });
+});

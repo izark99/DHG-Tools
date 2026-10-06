@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errMsg, type MasterAt, type User, type VersionInfo } from '../api';
 import { proposeMapping, readInput, normalizeHeader, type MappingProposal, type ParsedInput, type RawSheet } from '../engine/inputs';
 import { emptyLedger, hasRowsFor, laterPeriods, periodOf } from '../engine/ledger';
-import { runFlow, type RunResult } from '../engine/run';
-import type { FlowConfig, InputDef, MasterTable, Scalar } from '../engine/types';
+import { ledgerPlan, runFlow, type RunResult } from '../engine/run';
+import { formPhase, RUN_MODE_LABEL, runModes, type FlowConfig, type InputDef, type MasterTable, type RunMode, type Scalar } from '../engine/types';
 import { contextFromMasters, validateConfig } from '../engine/validate';
 import { periodLabel } from '../engine/effective';
 import { readLedger, writeLedger, type LedgerRead } from '../excel/ledgerFile';
@@ -27,9 +27,37 @@ interface InputState {
   showMapping: boolean;
 }
 
-export function usesLedger(config: FlowConfig): boolean {
-  const f = [config.forms.form02, config.forms.form03];
-  return f.some((x) => x.enabled && (x.adjust || (x.ledgerFeed && x.ledgerFeed.sheet !== 'none')));
+/** Forms a run stage produces, e.g. "Form 02" / "Form 02 + Form 03". */
+function formsOf(config: FlowConfig, mode: RunMode): string {
+  const ids = (['form02', 'form03'] as const).filter((id) => config.forms[id].enabled && (mode === 'both' || formPhase(id, config.forms[id]) === mode));
+  return ids.map((id) => (id === 'form02' ? 'Form 02' : 'Form 03')).join(' + ');
+}
+
+const MODE_HINT: Record<RunMode, string> = {
+  accrual: 'Lúc trích cuối kỳ. Ghi phần trích vào ledger.',
+  payment: 'Lúc chi thực tế (sau khi đã trích). Ghi phần chi vào ledger, giữ nguyên phần trích đã ghi.',
+  both: 'Trích và chi cùng lúc, một lần chạy.',
+};
+
+/** Asked before every run of a two-stage flow: accrual, payment, or both at once. No default. */
+function ModePicker({ config, value, onChange }: { config: FlowConfig; value: RunMode | null; onChange: (m: RunMode) => void }) {
+  return (
+    <div className="mode-picker wide" role="radiogroup" aria-label="Đợt chạy">
+      <div className="mode-picker-label">
+        Đợt chạy<em className="req">*</em>
+      </div>
+      <div className="mode-options">
+        {(['accrual', 'payment', 'both'] as const).map((m) => (
+          <button key={m} type="button" role="radio" aria-checked={value === m} className={value === m ? 'mode-option active' : 'mode-option'} onClick={() => onChange(m)}>
+            <span className="mode-title">
+              {RUN_MODE_LABEL[m]} <span className="muted">· {formsOf(config, m)}</span>
+            </span>
+            <span className="mode-hint">{MODE_HINT[m]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function missingRequired(def: InputDef, proposal: MappingProposal): string[] {
@@ -201,9 +229,15 @@ function WizardBody({
   const [result, setResult] = useState<RunResult | null>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  // two-stage flows: the user picks the stage before every run (nothing preselected)
+  const modes = runModes(config);
+  const twoStage = modes.length > 1;
+  const [pickedMode, setPickedMode] = useState<RunMode | null>(null);
+  const mode: RunMode | null = twoStage ? (pickedMode && modes.includes(pickedMode) ? pickedMode : null) : 'both';
+  const plan = ledgerPlan(config, mode ?? 'both');
 
   const ledgerName = config.ledger || 'shared';
-  const needLedger = usesLedger(config);
+  const needLedger = plan.uses;
   const mark = useAsync(() => (needLedger ? api.ledgerMark(ledgerName) : Promise.resolve({ mark: null })), [ledgerName, needLedger]);
   const period = periodOf(year, month);
   const masterMap = useMemo(() => Object.fromEntries(masters.map((t) => [t.name, t as MasterTable])), [masters]);
@@ -340,7 +374,7 @@ function WizardBody({
     stale: !!(ledgerFile && m && m.file_hash !== ledgerFile.read.hash),
     edited: !!ledgerFile?.read.editedOutside,
     empty: needLedger && !ledgerFile && !!m,
-    replace: !!(ledger && hasRowsFor(ledger, config.id, period)),
+    replace: !!(ledger && hasRowsFor(ledger, config.id, period, plan)),
   };
   const later = ledger ? laterPeriods(ledger, period) : [];
 
@@ -349,7 +383,7 @@ function WizardBody({
   const inputsMissing = config.inputs.filter((d) => d.required && !inputs[d.id]?.parsed);
   const gatesOpen = (Object.keys(gates) as (keyof typeof gates)[]).filter((k) => gates[k] && !confirm[k]);
   const canCompute =
-    !loading && !blocked && !configErrors.length && !paramsMissing.length && !inputsMissing.length && !gatesOpen.length && !(needLedger && mark.loading);
+    !!mode && !loading && !blocked && !configErrors.length && !paramsMissing.length && !inputsMissing.length && !gatesOpen.length && !(needLedger && mark.loading);
 
   const compute = () => {
     setBusy('Đang tính…');
@@ -370,6 +404,7 @@ function WizardBody({
             inputs: parsed,
             run: run as { month: number; year: number },
             ledger: needLedger ? (ledger ?? emptyLedger()) : null,
+            mode: mode ?? 'both',
           }),
         );
       } catch (e) {
@@ -395,7 +430,7 @@ function WizardBody({
       download(forms.buffer, forms.fileName, XLSX_TYPE);
       if (ledgerOut) setTimeout(() => download(ledgerOut!.buffer, ledgerOut!.name, XLSX_TYPE), 400);
       if (!testMode) {
-        const tasks: Promise<unknown>[] = [api.logRun(config.id, version, result.period, Object.fromEntries(masters.map((t) => [t.name, t.version])))];
+        const tasks: Promise<unknown>[] = [api.logRun(config.id, version, result.period, Object.fromEntries(masters.map((t) => [t.name, t.version])), result.mode)];
         if (ledgerOut) tasks.push(api.putLedgerMark(ledgerName, result.period, ledgerOut.hash));
         await Promise.all(tasks);
         mark.reload();
@@ -435,6 +470,9 @@ function WizardBody({
       title: masters.map((t) => `${t.name} v${t.version} (${rangeLabel(t)})`).join('\n'),
     },
     { ok: !configErrors.length, text: configErrors.length ? `Cấu hình còn ${configErrors.length} lỗi` : 'Cấu hình flow hợp lệ' },
+    ...(twoStage
+      ? [{ ok: !!mode, text: mode ? `Đợt chạy: ${RUN_MODE_LABEL[mode]} — xuất ${formsOf(config, mode)}` : 'Chưa chọn đợt chạy (Trích / Chi / Trích + Chi)' }]
+      : []),
     { ok: !paramsMissing.length, text: paramsMissing.length ? `Thiếu: ${paramsMissing.map((p) => p.label).join(', ')}` : `Kỳ ${String(month).padStart(2, '0')}/${year}` },
     { ok: !inputsMissing.length, text: inputsMissing.length ? `Thiếu file: ${inputsMissing.map((d) => d.label || d.id).join(', ')}` : 'Đã có đủ file dữ liệu' },
   ];
@@ -496,6 +534,17 @@ function WizardBody({
                   setConfirm((c) => ({ ...c, replace: false }));
                 }}
               />
+              {twoStage && (
+                <ModePicker
+                  config={config}
+                  value={mode}
+                  onChange={(m) => {
+                    invalidate();
+                    setConfirm((c) => ({ ...c, replace: false }));
+                    setPickedMode(m);
+                  }}
+                />
+              )}
               {config.runParams.map((p) => (
                 <label key={p.id} className="field">
                   {fieldLabel(p.label, p.required)}
@@ -623,7 +672,8 @@ function WizardBody({
                 )}
                 {gates.replace && (
                   <Gate checked={confirm.replace} onChange={(v) => setConfirm({ ...confirm, replace: v })} kind="warning" label="Thay thế dữ liệu cũ của kỳ này">
-                    Ledger đã có dữ liệu của flow {config.id} cho kỳ {period}. Chọn "Thay thế" để ghi đè (không nhân đôi), hoặc đổi kỳ / huỷ.
+                    Ledger đã có {plan.accrual && plan.actual ? 'phần trích và chi' : plan.accrual ? 'phần trích' : 'phần chi'} của flow {config.id} cho kỳ {period}. Chọn "Thay thế"
+                    để ghi đè phần này (không nhân đôi), hoặc đổi kỳ / huỷ.
                   </Gate>
                 )}
                 {later.length > 0 && <Alert kind="warning">Ledger đã có các kỳ sau kỳ đang chạy ({later.join(', ')}). Số điều chỉnh của các kỳ đó sẽ không tự cập nhật.</Alert>}

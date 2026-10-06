@@ -80,10 +80,16 @@ export function balances(ledger: Ledger, period: string): Map<string, Balance> {
   return out;
 }
 
-export function hasRowsFor(ledger: Ledger, flow: string, period: string): boolean {
+export interface LedgerSheets {
+  accrual: boolean;
+  actual: boolean;
+}
+
+/** Does the ledger already hold rows of this flow + period on the given sheets (default: either)? */
+export function hasRowsFor(ledger: Ledger, flow: string, period: string, sheets: LedgerSheets = { accrual: true, actual: true }): boolean {
   return (
-    ledger.accrual.some((r) => r.flow === flow && r.period === period) ||
-    ledger.actual.some((r) => r.flow === flow && r.period === period)
+    (sheets.accrual && ledger.accrual.some((r) => r.flow === flow && r.period === period)) ||
+    (sheets.actual && ledger.actual.some((r) => r.flow === flow && r.period === period))
   );
 }
 
@@ -110,18 +116,22 @@ const sortRows = <T extends LedgerKeyFields>(rows: T[]): T[] =>
             : 0,
   );
 
-/** Old ledger without this flow+period, plus the new rows. */
+/**
+ * Old ledger without this flow+period on the sheets this run writes, plus the new rows. A sheet the
+ * run does not write is kept as it is (a payment run never wipes the accrual of the same period).
+ */
 export function mergeLedger(
   old: Ledger,
   flow: string,
   period: string,
   accrual: LedgerAccrualRow[],
   actual: LedgerActualRow[],
+  replace: LedgerSheets = { accrual: true, actual: true },
 ): Ledger {
-  const keep = (r: LedgerKeyFields) => !(r.flow === flow && r.period === period);
+  const other = (r: LedgerKeyFields) => !(r.flow === flow && r.period === period);
   return {
-    accrual: sortRows([...old.accrual.filter(keep), ...accrual]),
-    actual: sortRows([...old.actual.filter(keep), ...actual]),
+    accrual: sortRows([...(replace.accrual ? old.accrual.filter(other) : old.accrual), ...accrual]),
+    actual: sortRows([...(replace.actual ? old.actual.filter(other) : old.actual), ...actual]),
     meta: old.meta,
   };
 }

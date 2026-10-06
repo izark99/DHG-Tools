@@ -152,8 +152,9 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
     dupCheck(cols, `forms.${id}.columns`, 'Cột');
     check(`forms.${id}.rowFilter`, f.rowFilter, at({ kind: 'formRowFilter', form: id }), false);
     f.columns.forEach((c, i) => check(`forms.${id}.columns[${i}] (${c.id})`, c.formula, at({ kind: 'formColumn', form: id, index: i })));
+    if (f.phase !== undefined && f.phase !== 'accrual' && f.phase !== 'payment') err(`forms.${id}.phase`, 'Đợt chạy của form phải là accrual (trích) hoặc payment (chi)');
     const feed = f.ledgerFeed;
-    if (!feed || !['accrual', 'actual', 'none'].includes(feed.sheet)) err(`forms.${id}.ledgerFeed`, 'ledgerFeed.sheet phải là accrual / actual / none');
+    if (!feed || !['accrual', 'actual', 'both', 'none'].includes(feed.sheet)) err(`forms.${id}.ledgerFeed`, 'ledgerFeed.sheet phải là accrual / actual / both / none');
     else if (feed.sheet !== 'none') {
       const col = f.columns.find((c) => c.id === feed.amountColumn);
       if (!col) err(`forms.${id}.ledgerFeed`, `Cột ghi vào ledger "${feed.amountColumn}" không có trong ${id}`);

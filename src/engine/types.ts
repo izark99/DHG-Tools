@@ -149,10 +149,18 @@ export interface FormLayout {
   totalLabel?: string;
 }
 
-export type LedgerSheet = 'accrual' | 'actual' | 'none';
+/** "both": the amount goes to the accrual sheet AND, the same amount, to the actual sheet (actual = accrual). */
+export type LedgerSheet = 'accrual' | 'actual' | 'both' | 'none';
+
+/** Run stage a form belongs to: "accrual" (trích, Form 02 by default) or "payment" (chi, Form 03 by default). */
+export type FormPhase = 'accrual' | 'payment';
+/** What one run produces: accrual forms, payment forms, or both at once. */
+export type RunMode = 'accrual' | 'payment' | 'both';
 
 export interface FormDef {
   enabled: boolean;
+  /** Run stage; default form02 = accrual, form03 = payment. */
+  phase?: FormPhase;
   /** Description prefix, e.g. "Trích" / "Chi". */
   prefix: string;
   /** Formula over the aggregated row (row.*); FALSE = row not on this form. */
@@ -235,3 +243,18 @@ export const ROW_FIELDS = [
 export const UNIT_FIELDS = ['unit', 'dept', 'costCenter', 'sector'] as const;
 
 export const ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function formPhase(id: 'form02' | 'form03', def: FormDef): FormPhase {
+  return def.phase ?? (id === 'form02' ? 'accrual' : 'payment');
+}
+
+/** Run modes a flow offers: one per phase of its enabled forms, plus "both" when there are two phases. */
+export function runModes(config: FlowConfig): RunMode[] {
+  const phases = new Set<FormPhase>();
+  if (config.forms.form02.enabled) phases.add(formPhase('form02', config.forms.form02));
+  if (config.forms.form03.enabled) phases.add(formPhase('form03', config.forms.form03));
+  if (phases.size < 2) return ['both'];
+  return ['accrual', 'payment', 'both'];
+}
+
+export const RUN_MODE_LABEL: Record<RunMode, string> = { accrual: 'Trích', payment: 'Chi', both: 'Trích + Chi' };

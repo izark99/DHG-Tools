@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { proposeMapping, readInput, type ParsedInput } from '../src/engine/inputs';
 import { emptyLedger } from '../src/engine/ledger';
 import { runFlow } from '../src/engine/run';
-import type { FlowConfig, MasterTable } from '../src/engine/types';
+import { runModes, type FlowConfig, type MasterTable } from '../src/engine/types';
 import { contextFromMasters, validateConfig } from '../src/engine/validate';
 import { writeForms } from '../src/excel/writeForms';
 import { MINI_MASTERS } from './fixture';
@@ -46,5 +46,11 @@ describe.each(sets)('seed flows on %s masters', (_name, masters) => {
     const { buffer, fileName } = await writeForms(cfg, r);
     expect(buffer.byteLength).toBeGreaterThan(1000);
     expect(fileName).toMatch(/^Form_.*\.xlsx$/);
+    // each run stage on its own (accrual run, then payment run) has no error either
+    for (const mode of runModes(cfg).filter((m) => m !== 'both')) {
+      const rm = runFlow({ config: cfg, masters, inputs: parse(cfg, syn.inputs), run: syn.run as never, ledger: emptyLedger(), mode });
+      expect(rm.issues.filter((i) => i.level === 'error').map((i) => `${mode} ${i.source}: ${i.message}`)).toEqual([]);
+      expect(rm.form02 || rm.form03).toBeTruthy();
+    }
   });
 });

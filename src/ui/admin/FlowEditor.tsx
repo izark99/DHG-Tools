@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError, errMsg, type User, type VersionInfo } from '../../api';
 import { periodLabel } from '../../engine/effective';
 import { scopeFor, type FormulaSite } from '../../engine/scopes';
-import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FooterBlock, FormColumn, FormDef, InputDef, InputField, MasterTable, RunParamDef, SignatureRole } from '../../engine/types';
+import { formPhase, type CheckDef, type CostItem, type EmployeeColumn, type ExtraSheetDef, type FlowConfig, type FooterBlock, type FormColumn, type FormDef, type FormPhase, type InputDef, type InputField, type MasterTable, type RunParamDef, type SignatureRole } from '../../engine/types';
 import { contextFromMasters, validateConfig, type ConfigError } from '../../engine/validate';
 import { Alert, download, Tabs, useAsync } from '../common';
 import { Card, Icon, PageHeader, toast } from '../layout';
@@ -516,6 +516,13 @@ function FormEditor({
           <input type="checkbox" checked={form.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} /> Xuất {id === 'form02' ? 'Form 02' : 'Form 03'}
         </label>
         <label>
+          Đợt chạy
+          <select value={formPhase(id, form)} onChange={(e) => onChange({ phase: e.target.value as FormPhase })}>
+            <option value="accrual">Trích (xuất khi chạy đợt trích)</option>
+            <option value="payment">Chi (xuất khi chạy đợt chi thực tế)</option>
+          </select>
+        </label>
+        <label>
           Tiền tố diễn giải
           <input value={form.prefix} onChange={(e) => onChange({ prefix: e.target.value })} />
         </label>
@@ -528,6 +535,7 @@ function FormEditor({
             <option value="none">không ghi</option>
             <option value="accrual">sheet accrual (số trích)</option>
             <option value="actual">sheet actual (số chi thực tế)</option>
+            <option value="both">cả hai, actual = accrual (chi đúng bằng số trích)</option>
           </select>
         </label>
         <label>

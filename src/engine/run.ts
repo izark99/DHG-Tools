@@ -3,9 +3,9 @@
 import { evaluate, keyOf, toBool, toNum, toStr, type Env, type RefMode, type Value } from './formula/evaluator';
 import { FormulaError, parse, type Node } from './formula/parser';
 import { excelRound } from './formula/round';
-import { balances, ledgerKey, mergeLedger, periodOf, type Ledger, type LedgerAccrualRow, type LedgerActualRow } from './ledger';
+import { balances, ledgerKey, mergeLedger, periodOf, type Ledger, type LedgerAccrualRow, type LedgerActualRow, type LedgerSheets } from './ledger';
 import type { ParsedInput } from './inputs';
-import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FormDef, FormLayout, MasterTable, PeriodType, Scalar } from './types';
+import { formPhase, runModes, type CheckDef, type CostItem, type EmployeeColumn, type ExtraSheetDef, type FlowConfig, type FormDef, type FormLayout, type MasterTable, type PeriodType, type RunMode, type Scalar } from './types';
 import { fillTemplate, normKey, periodLabel, runVars } from './util';
 
 export interface RunParams {
@@ -21,6 +21,24 @@ export interface RunContext {
   run: RunParams;
   /** Ledger read from the uploaded file (or an empty one). Null = flow does not use the ledger. */
   ledger: Ledger | null;
+  /** Run stage: accrual forms only, payment forms only, or both (default). */
+  mode?: RunMode;
+}
+
+const inMode = (config: FlowConfig, id: 'form02' | 'form03', mode: RunMode) => mode === 'both' || formPhase(id, config.forms[id]) === mode;
+
+/** Ledger sheets a run of this mode writes, and whether it needs a ledger at all. */
+export function ledgerPlan(config: FlowConfig, mode: RunMode = 'both'): LedgerSheets & { uses: boolean } {
+  const out = { accrual: false, actual: false, uses: false };
+  for (const id of ['form02', 'form03'] as const) {
+    const f = config.forms[id];
+    if (!f.enabled || !inMode(config, id, mode)) continue;
+    const sheet = f.ledgerFeed?.sheet ?? 'none';
+    if (sheet === 'accrual' || sheet === 'both') out.accrual = true;
+    if (sheet === 'actual' || sheet === 'both') out.actual = true;
+    if (sheet !== 'none' || f.adjust) out.uses = true;
+  }
+  return out;
 }
 
 export interface Issue {
@@ -90,6 +108,7 @@ export interface RunResult {
   extraSheets: ExtraSheetOut[];
   /** Output file name with templates filled in. */
   fileName: string;
+  mode: RunMode;
   issues: Issue[];
   ledgerOut: Ledger | null;
   blocked: boolean;
@@ -141,6 +160,7 @@ const str = (v: Scalar | undefined) => (v === null || v === undefined ? '' : Str
 
 export function runFlow(ctx: RunContext): RunResult {
   const { config, run } = ctx;
+  const mode: RunMode = runModes(config).includes(ctx.mode ?? 'both') ? (ctx.mode ?? 'both') : 'both';
   const issues = new Issues();
   const period = periodOf(run.year, run.month);
   const nodeCache = new Map<string, Node | FormulaError>();
@@ -692,7 +712,11 @@ export function runFlow(ctx: RunContext): RunResult {
           helper: e.row.helper,
         };
         const amt = excelRound(toNum(e.values[feed.amountColumn] ?? null), 0);
-        if (feed.sheet === 'accrual') {
+        if (feed.sheet === 'both') {
+          // paid exactly as accrued (actual = accrual): the balance of the key stays 0
+          ledgerAccrual.push({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
+          ledgerActual.push({ ...base, amount: amt + e.row.adjusted });
+        } else if (feed.sheet === 'accrual') {
           if (!e.row.accrue) continue;
           ledgerAccrual.push({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
         } else ledgerActual.push({ ...base, amount: amt });
@@ -716,8 +740,10 @@ export function runFlow(ctx: RunContext): RunResult {
     cc: (col) => ccValue(r.unit, col),
   });
 
-  const form02 = buildForm('form02', config.forms.form02);
-  const form03 = buildForm('form03', config.forms.form03);
+  // a run of one stage builds only that stage's forms
+  const form02 = inMode(config, 'form02', mode) ? buildForm('form02', config.forms.form02) : null;
+  const form03 = inMode(config, 'form03', mode) ? buildForm('form03', config.forms.form03) : null;
+  const skipped = (id: 'form02' | 'form03') => config.forms[id].enabled && !inMode(config, id, mode);
 
   // ---- checks ------------------------------------------------------------------
   const totalEnv: Env = {
@@ -736,6 +762,9 @@ export function runFlow(ctx: RunContext): RunResult {
   };
 
   const runCheck = (c: CheckDef) => {
+    // a check about a form this run does not produce belongs to the other run
+    if ((c.scope === 'form02' && skipped('form02')) || (c.scope === 'form03' && skipped('form03'))) return;
+    if ((skipped('form02') && /\bf02\./.test(c.formula)) || (skipped('form03') && /\bf03\./.test(c.formula))) return;
     const node = compile(c.formula);
     if (node instanceof FormulaError) {
       issues.add('error', 'formula', `Kiểm tra "${c.id}": ${node.message}`);
@@ -844,12 +873,13 @@ export function runFlow(ctx: RunContext): RunResult {
   });
   if (form02) form02.layout = renderLayout(form02.def.layout, 'Form 02');
   if (form03) form03.layout = renderLayout(form03.def.layout, 'Form 03');
-  const fileName = render(config.fileName || 'Form_{FLOW}_T{MM}.{YYYY}.xlsx', 'Tên file');
+  let fileName = render(config.fileName || 'Form_{FLOW}_T{MM}.{YYYY}.xlsx', 'Tên file');
+  // one stage of a two-stage flow: keep the accrual and the payment files apart
+  if (mode !== 'both' && runModes(config).length > 1) fileName = fileName.replace(/(\.xlsx)?$/i, `_${mode === 'accrual' ? 'Trich' : 'Chi'}$1`);
 
   // ---- ledger ------------------------------------------------------------------
-  const feeds = [config.forms.form02, config.forms.form03].some((f) => f.enabled && f.ledgerFeed?.sheet !== 'none');
-  const usesLedger = feeds || config.forms.form02.adjust || config.forms.form03.adjust;
-  const ledgerOut = usesLedger ? mergeLedger(ledger ?? { accrual: [], actual: [], meta: null }, config.id, period, ledgerAccrual, ledgerActual) : null;
+  const plan = ledgerPlan(config, mode);
+  const ledgerOut = plan.uses ? mergeLedger(ledger ?? { accrual: [], actual: [], meta: null }, config.id, period, ledgerAccrual, ledgerActual, plan) : null;
 
   const list = issues.list();
   return {
@@ -862,6 +892,7 @@ export function runFlow(ctx: RunContext): RunResult {
     form03,
     extraSheets,
     fileName,
+    mode,
     issues: list,
     ledgerOut,
     blocked: list.some((i) => i.level === 'error'),
