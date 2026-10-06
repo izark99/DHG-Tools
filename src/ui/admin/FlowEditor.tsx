@@ -5,13 +5,14 @@ import { scopeFor, type FormulaSite } from '../../engine/scopes';
 import type { CheckDef, CostItem, EmployeeColumn, ExtraSheetDef, FlowConfig, FormColumn, FormDef, InputDef, InputField, MasterTable, RunParamDef, SignatureRole } from '../../engine/types';
 import { contextFromMasters, validateConfig, type ConfigError } from '../../engine/validate';
 import { Alert, download, Tabs, useAsync } from '../common';
+import { Card, Icon, PageHeader, toast } from '../layout';
 import { RunWizard } from '../RunWizard';
 import { blankConfig } from './blank';
 import { FormulaInput } from './FormulaInput';
 import { FieldInput, ListEditor } from './ListEditor';
 import { Versions } from './Versions';
 
-type Tab = 'general' | 'inputs' | 'params' | 'employee' | 'cost' | 'agg' | 'form02' | 'form03' | 'checks' | 'extra' | 'json' | 'versions' | 'test';
+type Tab = 'errors' | 'general' | 'inputs' | 'params' | 'employee' | 'cost' | 'agg' | 'form02' | 'form03' | 'checks' | 'extra' | 'json' | 'versions' | 'test';
 
 export function FlowEditorPage({ flowId, user }: { flowId: string; user: User }) {
   const detail = useAsync(() => api.flow(flowId), [flowId]);
@@ -38,7 +39,7 @@ export function FlowEditorPage({ flowId, user }: { flowId: string; user: User })
   }, [detail.data, flowId]);
 
   if (detail.error || masters.error || loadErr) return <Alert kind="error">{detail.error || masters.error || loadErr}</Alert>;
-  if (!base || !masters.data || !detail.data) return <p className="muted">Đang tải…</p>;
+  if (!base || !masters.data || !detail.data) return <div className="loading">Đang tải…</div>;
   return (
     <Editor
       key={base.from}
@@ -79,7 +80,11 @@ function Editor({
   const [cfg, setCfg] = useState<FlowConfig>(() => normalize(structuredClone(initial)));
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState<Tab>('general');
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'error' | 'warning'; text: string; errors?: ConfigError[] } | null>(null);
+  const setMsg = (m: { kind: 'ok' | 'error' | 'warning'; text: string; errors?: ConfigError[] } | null) => {
+    if (!m) return;
+    toast(m.kind, m.errors?.length ? `${m.text} (${m.errors.length} lỗi — xem tab Lỗi cấu hình)` : m.text);
+    if (m.errors?.length) setTab('errors');
+  };
   const [testNo, setTestNo] = useState(0);
   const vctx = useMemo(() => contextFromMasters(masters), [masters]);
   const errors = useMemo(() => validateConfig(cfg, vctx), [cfg, vctx]);
@@ -129,72 +134,78 @@ function Editor({
   const ccCols = masters.find((t) => t.name === cfg.aggregation.costCenterTable)?.columns ?? [];
   const runParamIds = cfg.runParams.map((p) => p.id);
   const errCount = (prefix: string | string[]) => errors.filter((e) => (Array.isArray(prefix) ? prefix : [prefix]).some((p) => e.path.startsWith(p))).length;
-  const lbl = (s: string, prefix: string | string[]) => {
-    const n = errCount(prefix);
-    return n ? `${s} (${n}⚠)` : s;
-  };
+  const t = (id: Tab, label: string, prefix?: string | string[]) => ({ id, label, count: prefix ? errCount(prefix) : undefined, tone: 'error' as const });
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'general', label: lbl('Chung', ['id', 'name', 'fileName']) },
-    { id: 'inputs', label: lbl('Inputs', 'inputs') },
-    { id: 'params', label: lbl('Tham số chạy', 'runParams') },
-    { id: 'employee', label: lbl('Bảng nhân viên', 'employeeTable') },
-    { id: 'cost', label: lbl('Cost items', 'costItems') },
-    { id: 'agg', label: lbl('Tổng hợp', 'aggregation') },
-    { id: 'form02', label: lbl('Form 02', 'forms.form02') },
-    { id: 'form03', label: lbl('Form 03', 'forms.form03') },
-    { id: 'checks', label: lbl('Kiểm tra', 'checks') },
-    { id: 'extra', label: lbl('Sheet thêm', 'extraSheets') },
-    { id: 'json', label: 'JSON' },
-    { id: 'versions', label: 'Phiên bản' },
-    { id: 'test', label: 'Chạy thử' },
+  const tabs = [
+    t('general', 'Chung', ['id', 'name', 'fileName']),
+    t('inputs', 'Inputs', 'inputs'),
+    t('params', 'Tham số chạy', 'runParams'),
+    t('employee', 'Bảng nhân viên', 'employeeTable'),
+    t('cost', 'Cost items', 'costItems'),
+    t('agg', 'Tổng hợp', 'aggregation'),
+    t('form02', 'Form 02', 'forms.form02'),
+    t('form03', 'Form 03', 'forms.form03'),
+    t('checks', 'Kiểm tra', 'checks'),
+    t('extra', 'Sheet thêm', 'extraSheets'),
+    { id: 'errors' as Tab, label: 'Lỗi cấu hình', count: errors.length, tone: 'error' as const },
+    { id: 'json' as Tab, label: 'JSON' },
+    { id: 'versions' as Tab, label: 'Phiên bản' },
+    { id: 'test' as Tab, label: 'Chạy thử' },
   ];
 
   return (
-    <section>
-      <div className="row gap wrap sticky-bar">
-        <h2>
-          {cfg.name} <span className="muted">({flowId})</span>
-        </h2>
-        <span className="muted small">Đang sửa từ: {from}</span>
-        {dirty && <span className="badge warn">chưa lưu</span>}
-        <span className="spacer" />
-        <button type="button" onClick={saveDraft} disabled={!dirty}>
-          Lưu nháp
-        </button>
-        <button type="button" className="primary" onClick={publish} disabled={errors.length > 0}>
-          Publish
-        </button>
-        <button type="button" onClick={() => download(JSON.stringify(cfg, null, 2), `${flowId}.config.json`, 'application/json')}>
-          Xuất JSON
-        </button>
-        {hasDraft && (
-          <button
-            type="button"
-            className="danger"
-            onClick={async () => {
-              if (!confirm('Huỷ bản nháp và quay về phiên bản đang dùng?')) return;
-              await api.deleteDraft(flowId);
-              reload();
-            }}
-          >
-            Huỷ nháp
-          </button>
-        )}
+    <>
+      <PageHeader
+        crumb={
+          <>
+            <a href="#/admin/flows">Flows</a> <Icon name="chevron" size={12} /> {flowId}
+          </>
+        }
+        title={cfg.name || flowId}
+        subtitle={
+          <span className="editor-status">
+            <span className="pill">{flowId}</span>
+            <span>Đang sửa từ: {from}</span>
+            <span className={dirty ? 'pill pill-warn' : 'pill pill-ghost'}>{dirty ? 'chưa lưu' : 'đã lưu'}</span>
+            <span className={errors.length ? 'pill pill-bad' : 'pill pill-ok'}>{errors.length ? `${errors.length} lỗi` : 'hợp lệ'}</span>
+          </span>
+        }
+        actions={
+          <>
+            <button type="button" onClick={() => download(JSON.stringify(cfg, null, 2), `${flowId}.config.json`, 'application/json')}>
+              <Icon name="download" size={16} /> Xuất JSON
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={!hasDraft}
+              onClick={async () => {
+                if (!confirm('Huỷ bản nháp và quay về phiên bản đang dùng?')) return;
+                await api.deleteDraft(flowId);
+                reload();
+              }}
+            >
+              Huỷ nháp
+            </button>
+            <button type="button" onClick={saveDraft} disabled={!dirty}>
+              <Icon name="save" size={16} /> Lưu nháp
+            </button>
+            <button type="button" className="primary" onClick={publish} disabled={errors.length > 0}>
+              <Icon name="rocket" size={16} /> Publish
+            </button>
+          </>
+        }
+      />
+      <div className="editor-layout">
+      <div className="editor-nav">
+        <Tabs tabs={tabs} value={tab} onChange={setTab} vertical />
       </div>
-      {msg && (
-        <Alert kind={msg.kind}>
-          {msg.text}
-          {msg.errors && <ErrorList errors={msg.errors} />}
-        </Alert>
+      <div className="tab-panel">
+      {tab === 'errors' && (
+        <Card title="Lỗi cấu hình">
+          {errors.length ? <ErrorList errors={errors} /> : <Alert kind="ok">Không có lỗi — có thể publish.</Alert>}
+        </Card>
       )}
-      {errors.length > 0 && (
-        <details className="alert alert-warning">
-          <summary>{errors.length} lỗi cấu hình — phải sửa hết mới publish được</summary>
-          <ErrorList errors={errors} />
-        </details>
-      )}
-      <Tabs tabs={tabs} value={tab} onChange={setTab} />
 
       {tab === 'general' && (
         <div className="card form-grid">
@@ -426,10 +437,12 @@ function Editor({
           <button type="button" onClick={() => setTestNo((n) => n + 1)}>
             Nạp lại cấu hình vào màn hình chạy thử
           </button>
-          <RunWizard key={testNo} config={cfg} version={null} masters={masters} user={user} testMode />
+          <RunWizard key={testNo} config={cfg} version={null} masters={masters} user={user} testMode embedded />
         </div>
       )}
-    </section>
+      </div>
+      </div>
+    </>
   );
 }
 
@@ -510,7 +523,7 @@ function FormEditor({
         )}
       </div>
 
-      <h3>Cột</h3>
+      <h3 className="section-title">Cột</h3>
       <p className="muted small">
         row.* = dòng tổng hợp (no, sector, dept, unit, budgetCode, costCenter, costCode, helper, name, period, description, amount, employeeAmount, count, adjusted, actualAccrual). UNITSUM(emp.x): tổng cột nhân viên của cả đơn vị, đặt vào dòng thoả điều kiện, ví dụ{' '}
         <code>IF(row.costCode IN ("A","B"), UNITSUM(emp.si), 0)</code>.
@@ -534,7 +547,7 @@ function FormEditor({
         ]}
       />
 
-      <h3>Layout in</h3>
+      <h3 className="section-title">Layout in</h3>
       <div className="card form-grid">
         <label>
           Tên sheet
@@ -561,7 +574,7 @@ function FormEditor({
           <input value={L.placeDate ?? ''} onChange={(e) => setL({ placeDate: e.target.value })} />
         </label>
       </div>
-      <h4>Chữ ký</h4>
+      <h4 className="section-title">Chữ ký</h4>
       <ListEditor<SignatureRole>
         items={L.signatures ?? []}
         onChange={(signatures) => setL({ signatures })}

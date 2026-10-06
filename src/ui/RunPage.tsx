@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, errMsg, type User } from '../api';
 import type { FlowConfig } from '../engine/types';
 import { Alert, readFileText, useAsync } from './common';
+import { Card, PageHeader } from './layout';
 import { RunWizard } from './RunWizard';
 
 /** Run the latest published version of a flow. */
@@ -10,7 +11,7 @@ export function RunPage({ flowId, user }: { flowId: string; user: User }) {
     const [flows, masters] = await Promise.all([api.flows(), api.masters()]);
     return { flow: flows.flows.find((f) => f.id === flowId) ?? null, masters: masters.tables };
   }, [flowId]);
-  if (data.loading) return <p className="muted">Đang tải cấu hình…</p>;
+  if (data.loading) return <div className="loading">Đang tải cấu hình…</div>;
   if (data.error) return <Alert kind="error">{data.error}</Alert>;
   const f = data.data!.flow;
   if (!f || !f.published) return <Alert kind="error">Flow "{flowId}" không tồn tại hoặc chưa được publish.</Alert>;
@@ -33,9 +34,9 @@ export function RunFromFile({ user }: { user: User }) {
   const [err, setErr] = useState('');
   const masters = useAsync(() => api.masters(), []);
   return (
-    <section>
-      <h2>Chạy với file cấu hình JSON</h2>
-      <p className="muted">Dùng để chạy thử. Kết quả có hậu tố _TEST, không ghi nhật ký và không cập nhật dấu ledger.</p>
+    <>
+      {!config && <PageHeader crumb="Vận hành" title="Chạy thử từ file JSON" subtitle="Kết quả có hậu tố _TEST, không ghi nhật ký và không cập nhật dấu ledger." />}
+      <Card title="File cấu hình flow (.json)">
       <input
         type="file"
         accept=".json,application/json"
@@ -57,7 +58,8 @@ export function RunFromFile({ user }: { user: User }) {
       />
       {err && <Alert kind="error">{err}</Alert>}
       {masters.error && <Alert kind="error">{masters.error}</Alert>}
+      </Card>
       {config && masters.data && <RunWizard key={loadNo} config={config} version={null} masters={masters.data.tables} user={user} testMode />}
-    </section>
+    </>
   );
 }

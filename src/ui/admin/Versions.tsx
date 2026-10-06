@@ -88,6 +88,7 @@ export function Versions({
     <div>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       {!versions.length && <p className="muted">Chưa có phiên bản nào được publish.</p>}
+      <div className="table-wrap">
       <table className="grid">
         <thead>
           <tr>
@@ -107,12 +108,13 @@ export function Versions({
               <td>{v.created_by}</td>
               <td>{new Date(v.created_at).toLocaleString('vi-VN')}</td>
               <td className="row gap">
-                <button type="button" onClick={() => load(v.version)}>
+                <button type="button" className="sm" onClick={() => load(v.version)}>
                   Xem / so sánh
                 </button>
                 {i > 0 && (
                   <button
                     type="button"
+                    className="sm"
                     onClick={async () => {
                       if (!confirm(`Publish lại v${v.version} thành phiên bản mới (rollback)?`)) return;
                       try {
@@ -132,8 +134,9 @@ export function Versions({
           ))}
         </tbody>
       </table>
+      </div>
       {view && (
-        <div className="card">
+        <div className="card diff-card">
           <div className="row gap">
             <strong>v{view.version}</strong> so với
             <select

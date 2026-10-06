@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { FormOut, Issue, RunResult } from '../engine/run';
 import type { FlowConfig, Scalar } from '../engine/types';
-import { Alert, DataTable, Tabs, type GridColumn } from './common';
+import { Alert, DataTable, Tabs, type GridColumn, type TabDef } from './common';
+import { Card } from './layout';
 
 export function IssueList({ issues }: { issues: Issue[] }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -52,12 +53,12 @@ type Tab = 'issues' | 'emp' | 'f02' | 'f03' | 'totals' | `x${number}`;
 export function Preview({ config, result }: { config: FlowConfig; result: RunResult }) {
   const [tab, setTab] = useState<Tab>('issues');
   const errors = result.issues.filter((i) => i.level === 'error').length;
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'issues', label: `Kiểm tra (${errors} lỗi)` },
-    { id: 'emp', label: `Bảng nhân viên (${result.employees.length})` },
+  const tabs: TabDef<Tab>[] = [
+    { id: 'issues', label: 'Kiểm tra', count: errors, tone: 'error' },
+    { id: 'emp', label: 'Bảng nhân viên', count: result.employees.length },
   ];
-  if (result.form02) tabs.push({ id: 'f02', label: `Form 02 (${result.form02.rows.length})` });
-  if (result.form03) tabs.push({ id: 'f03', label: `Form 03 (${result.form03.rows.length})` });
+  if (result.form02) tabs.push({ id: 'f02', label: 'Form 02', count: result.form02.rows.length });
+  if (result.form03) tabs.push({ id: 'f03', label: 'Form 03', count: result.form03.rows.length });
   result.extraSheets.forEach((s, i) => tabs.push({ id: `x${i}`, label: s.def.name }));
   tabs.push({ id: 'totals', label: 'Tổng theo mã / đơn vị' });
 
@@ -68,16 +69,17 @@ export function Preview({ config, result }: { config: FlowConfig; result: RunRes
   const empRows = useMemo(() => result.employees.map((e) => ({ _key: e.key, ...e.values })), [result]);
 
   return (
-    <div className="card">
-      <h3>4. Kết quả — kỳ {result.period}</h3>
+    <Card step={4} title={`Kết quả — kỳ ${result.period}`} className="result-card">
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
-      {tab === 'issues' && <IssueList issues={result.issues} />}
-      {tab === 'emp' && <DataTable columns={empCols} rows={empRows} />}
-      {tab === 'f02' && result.form02 && <DataTable {...formTable(result.form02)} />}
-      {tab === 'f03' && result.form03 && <DataTable {...formTable(result.form03)} />}
-      {tab.startsWith('x') && <ExtraSheet sheet={result.extraSheets[Number(tab.slice(1))]} />}
-      {tab === 'totals' && <Totals result={result} />}
-    </div>
+      <div className="tab-panel">
+        {tab === 'issues' && <IssueList issues={result.issues} />}
+        {tab === 'emp' && <DataTable columns={empCols} rows={empRows} />}
+        {tab === 'f02' && result.form02 && <DataTable {...formTable(result.form02)} />}
+        {tab === 'f03' && result.form03 && <DataTable {...formTable(result.form03)} />}
+        {tab.startsWith('x') && <ExtraSheet sheet={result.extraSheets[Number(tab.slice(1))]} />}
+        {tab === 'totals' && <Totals result={result} />}
+      </div>
+    </Card>
   );
 }
 

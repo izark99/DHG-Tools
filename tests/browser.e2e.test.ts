@@ -101,7 +101,7 @@ describe('browser end-to-end', () => {
     await page.getByText('Đang sửa từ: bản nháp').waitFor();
 
     // break a formula → publish disabled with a clear message
-    await page.getByRole('button', { name: /^Bảng nhân viên/ }).click();
+    await page.getByRole('tab', { name: /^Bảng nhân viên/ }).click();
     const f = page.locator('.list-editor .item').nth(2).locator('textarea');
     await f.fill('[ins] + FOO(1)');
     await page.locator('.formula .ferr').getByText('tham chiếu tới cột đứng sau').first().waitFor();
@@ -131,7 +131,7 @@ describe('browser end-to-end', () => {
     expect(v2.fileName).toBe('X_{MM}.xlsx');
     await page.goto(`${BASE}/#/`);
     await page.goto(`${BASE}/#/admin/flows/${FLOW}`);
-    await page.getByRole('button', { name: 'Phiên bản' }).click();
+    await page.getByRole('tab', { name: 'Phiên bản' }).click();
     await page.getByText('v3 (đang dùng)').waitFor();
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/versions.png`, fullPage: true });
   });
@@ -143,10 +143,10 @@ describe('browser end-to-end', () => {
     await page.getByLabel('Năm').fill('2026');
     await page.getByLabel('Người lập').fill('Nguyễn Văn A');
     await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
-    await page.getByText('✓ 3 dòng').waitFor();
+    await page.getByText(/3 dòng · sheet/).waitFor();
     await page.getByRole('button', { name: 'Tính' }).click();
     await page.getByText('Kết quả — kỳ 2026-09').waitFor();
-    await page.getByRole('button', { name: /^Form 02/ }).click();
+    await page.getByRole('tab', { name: /^Form 02/ }).click();
     await page.getByText('Trích Thưởng quý_Q03.2026_D1-U1').waitFor();
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/run-form02.png`, fullPage: true });
 
@@ -171,11 +171,11 @@ describe('browser end-to-end', () => {
     // no ledger chosen while one exists → blocking confirmation
     await page.getByText('mất toàn bộ lịch sử điều chỉnh').waitFor();
     await page.locator('.input-block').nth(1).locator('input[type=file]').setInputFiles(ledger1);
-    await page.getByText(/✓ 7 dòng trích/).waitFor();
+    await page.getByText(/7 dòng trích/).waitFor();
     expect(await page.getByText('không phải bản mới nhất').count()).toBe(0);
     await page.getByRole('button', { name: 'Tính' }).click();
     await page.getByText('Kết quả — kỳ 2026-10').waitFor();
-    await page.getByRole('button', { name: /^Form 02/ }).click();
+    await page.getByRole('tab', { name: /^Form 02/ }).click();
     // quarterly bonus accrued in 09 but never paid → adjusted -2,000,000 in 10
     await page.getByRole('cell', { name: '-2,000,000' }).first().waitFor();
     await downloadsOf(2, () => page.getByRole('button', { name: 'Tải Form + Ledger' }).click());
@@ -187,6 +187,60 @@ describe('browser end-to-end', () => {
     await page.getByText('không phải bản mới nhất').waitFor();
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stale-ledger.png`, fullPage: true });
     expect(await page.getByRole('button', { name: 'Tính' }).isDisabled()).toBe(true);
+  });
+
+  it('layout does not shift between tabs and pages', async () => {
+    const boxes = (sel: string) =>
+      page.$$eval(sel, (els) => els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(',');
+      }));
+    // flow editor: header, tab bar and every tab button stay put on every tab
+    await page.goto(`${BASE}/#/`);
+    await page.goto(`${BASE}/#/admin/flows/${FLOW}`);
+    await page.locator('.tabs .tab').first().waitFor();
+    const n = await page.locator('.tabs .tab').count();
+    let ref = '';
+    for (let i = 0; i < n; i++) {
+      await page.locator('.tabs .tab').nth(i).click();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const now = JSON.stringify([await boxes('.page-header'), await boxes('.tabs'), await boxes('.tabs .tab'), await boxes('.tab-panel')].map((b, k) => (k === 3 ? b.map((x) => x.split(',').slice(0, 3).join(',')) : b)));
+      if (i === 0) ref = now;
+      expect(now, `editor tab #${i}`).toBe(ref);
+      if (process.env.SHOTS && i < 3) await page.screenshot({ path: `${process.env.SHOTS}/editor-tab${i}.png` });
+    }
+    // run result: preview tabs stay put and the page does not jump
+    await page.goto(`${BASE}/#/`);
+    await page.goto(`${BASE}/#/run/${FLOW}`);
+    await page.getByLabel('Tháng').selectOption('11');
+    await page.locator('.input-block').first().locator('input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
+    await page.getByText(/3 dòng · sheet/).waitFor();
+    // ledger warning must be confirmed (a ledger exists but none chosen)
+    await page.locator('.alert .check input').first().check();
+    await page.getByRole('button', { name: 'Tính' }).click();
+    await page.getByText('Kết quả — kỳ 2026-11').waitFor();
+    const rtabs = page.locator('.result-card .tabs .tab');
+    await rtabs.first().scrollIntoViewIfNeeded();
+    const scrollY = await page.evaluate(() => window.scrollY);
+    let rref = '';
+    for (let i = 0; i < (await rtabs.count()); i++) {
+      await rtabs.nth(i).click();
+      expect(await page.evaluate(() => window.scrollY), `scroll on result tab #${i}`).toBe(scrollY);
+      const now = JSON.stringify([await boxes('.result-card .tabs'), await boxes('.result-card .tabs .tab'), await boxes('.run-side .card')]);
+      if (i === 0) rref = now;
+      expect(now, `result tab #${i}`).toBe(rref);
+    }
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/run-result.png`, fullPage: true });
+    // sidebar items stay put across pages
+    let nref = '';
+    for (const h of ['#/', '#/admin/flows', '#/admin/masters', '#/admin/users', '#/admin/backup', '#/account']) {
+      await page.goto(`${BASE}/${h}`);
+      await page.locator('.page-header').first().waitFor();
+      const now = JSON.stringify([await boxes('.nav-item'), await boxes('.brand'), await boxes('.sidebar-foot'), (await boxes('.page-header')).map((b) => b.split(',').slice(0, 3).join(','))]);
+      if (!nref) nref = now;
+      expect(now, `page ${h}`).toBe(nref);
+      if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/page-${h.replace(/[#/]/g, '') || 'home'}.png` });
+    }
   });
 
   it('no request carries payroll rows, and nothing goes to another origin', async () => {

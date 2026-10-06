@@ -6,6 +6,7 @@ import { RunPage, RunFromFile } from './RunPage';
 import { MastersPage } from './admin/Masters';
 import { UsersPage } from './admin/Users';
 import { BackupPage } from './admin/Backup';
+import { Icon, initials, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
 
@@ -56,36 +57,66 @@ export function App() {
   else if (parts[0] === 'admin' && parts[1] === 'flows') page = <FlowsPage />;
   else page = <Home user={user} />;
 
-  const link = (to: string, label: string) => (
-    <a href={`#${to}`} className={hash === to || (to !== '/' && hash.startsWith(to)) ? 'active' : undefined}>
-      {label}
-    </a>
-  );
+  const nav = (to: string, label: string, icon: string) => {
+    const active = to === '/' ? hash === '/' || hash.startsWith('/run') : hash.startsWith(to);
+    return (
+      <a href={`#${to}`} className={active ? 'nav-item active' : 'nav-item'}>
+        <Icon name={icon} />
+        <span>{label}</span>
+      </a>
+    );
+  };
+  const name = user.display_name || user.username;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <span className="brand">C&amp;B Forms</span>
-        <nav>
-          {link('/', 'Trang chủ')}
-          {isAdmin && link('/admin/flows', 'Flows')}
-          {isAdmin && link('/admin/masters', 'Master data')}
-          {isAdmin && link('/admin/users', 'Người dùng')}
-          {isAdmin && link('/admin/backup', 'Backup')}
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-logo">CB</div>
+          <div>
+            <div className="brand-name">C&amp;B Forms</div>
+            <div className="brand-sub">Compensation &amp; Benefits</div>
+          </div>
+        </div>
+        <nav className="nav">
+          <div className="nav-group">Vận hành</div>
+          {nav('/', 'Chạy flow', 'play')}
+          {nav('/run-file', 'Chạy thử từ JSON', 'file')}
+          {isAdmin && (
+            <>
+              <div className="nav-group">Quản trị</div>
+              {nav('/admin/flows', 'Flows', 'flow')}
+              {nav('/admin/masters', 'Master data', 'table')}
+              {nav('/admin/users', 'Người dùng', 'users')}
+              {nav('/admin/backup', 'Backup cấu hình', 'archive')}
+            </>
+          )}
         </nav>
-        <span className="spacer" />
-        <a href="#/account">{user.display_name || user.username}</a>
-        <button
-          type="button"
-          className="link"
-          onClick={() => {
-            api.logout().finally(() => setUser(null));
-          }}
-        >
-          Đăng xuất
-        </button>
-      </header>
-      <main>{page}</main>
+        <div className="sidebar-foot">
+          <a href="#/account" className="user-chip" title="Tài khoản">
+            <span className="avatar">{initials(name)}</span>
+            <span className="user-meta">
+              <span className="user-name">{name}</span>
+              <span className="user-role">{isAdmin ? 'Quản trị viên' : 'Người dùng'}</span>
+            </span>
+          </a>
+          <button
+            type="button"
+            className="icon-btn"
+            title="Đăng xuất"
+            aria-label="Đăng xuất"
+            onClick={() => {
+              api.logout().finally(() => setUser(null));
+            }}
+          >
+            <Icon name="logout" />
+          </button>
+        </div>
+      </aside>
+      <main className="content">
+        <div className="content-inner">{page}</div>
+      </main>
+      <Toaster />
     </div>
   );
 }

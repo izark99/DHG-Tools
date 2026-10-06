@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, errMsg } from '../../api';
 import type { FlowConfig } from '../../engine/types';
 import { Alert, useAsync } from '../common';
+import { Card, Icon, PageHeader } from '../layout';
 import { blankConfig } from './blank';
 
 export function FlowsPage() {
@@ -23,10 +24,11 @@ export function FlowsPage() {
   };
 
   return (
-    <section>
-      <h2>Flows</h2>
+    <>
+      <PageHeader crumb="Quản trị" title="Flows" subtitle="Mỗi flow là một bộ cấu hình: input, công thức, cost item, Form 02/03, kiểm tra. Người dùng luôn chạy phiên bản publish mới nhất." />
       {list.error && <Alert kind="error">{list.error}</Alert>}
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+      <Card title="Danh sách flow">
       <div className="table-wrap">
         <table className="grid">
           <thead>
@@ -53,16 +55,24 @@ export function FlowsPage() {
                 </td>
                 <td>{f.id}</td>
                 <td>{f.name}</td>
-                <td>{f.published ? `v${f.published.version} — ${f.published.by}, ${new Date(f.published.at).toLocaleString('vi-VN')}` : <span className="muted">chưa publish</span>}</td>
-                <td>{f.hasDraft ? 'có' : ''}</td>
+                <td>
+                  {f.published ? (
+                    <>
+                      <span className="pill pill-ok">v{f.published.version}</span> <span className="muted small">{f.published.by} · {new Date(f.published.at).toLocaleString('vi-VN')}</span>
+                    </>
+                  ) : (
+                    <span className="pill">chưa publish</span>
+                  )}
+                </td>
+                <td>{f.hasDraft ? <span className="pill pill-warn">có bản nháp</span> : null}</td>
                 <td>
                   <label className="check">
                     <input type="checkbox" checked={f.active} onChange={(e) => api.patchFlow(f.id, { active: e.target.checked }).then(list.reload)} /> hiện cho người dùng
                   </label>
                 </td>
                 <td>
-                  <a className="button" href={`#/admin/flows/${encodeURIComponent(f.id)}`}>
-                    Sửa
+                  <a className="button sm" href={`#/admin/flows/${encodeURIComponent(f.id)}`}>
+                    Sửa cấu hình
                   </a>
                 </td>
               </tr>
@@ -70,19 +80,19 @@ export function FlowsPage() {
           </tbody>
         </table>
       </div>
+      </Card>
 
-      <div className="card">
-        <h3>Tạo flow mới</h3>
+      <Card title="Tạo flow mới">
         <div className="form-grid">
-          <label>
+          <label className="field">
             Mã flow (A-Z, 0-9, _)
             <input value={id} onChange={(e) => setId(e.target.value.trim())} />
           </label>
-          <label>
+          <label className="field">
             Tên
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label>
+          <label className="field">
             Bắt đầu từ file cấu hình JSON (tuỳ chọn)
             <input
               type="file"
@@ -106,9 +116,9 @@ export function FlowsPage() {
           </label>
         </div>
         <button type="button" className="primary" disabled={!/^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(id)} onClick={create}>
-          Tạo (thành bản nháp)
+          <Icon name="plus" size={16} /> Tạo (thành bản nháp)
         </button>
-      </div>
-    </section>
+      </Card>
+    </>
   );
 }

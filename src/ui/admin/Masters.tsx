@@ -4,6 +4,7 @@ import { api, errMsg } from '../../api';
 import type { MasterTable, Scalar } from '../../engine/types';
 import { tableToXlsx, xlsxToTable } from '../../excel/masterFile';
 import { Alert, download, useAsync, XLSX_TYPE } from '../common';
+import { Icon, PageHeader } from '../layout';
 
 const PAGE = 100;
 
@@ -12,19 +13,23 @@ export function MastersPage() {
   const [sel, setSel] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const tables = list.data?.tables ?? [];
-  const current = tables.find((t) => t.name === sel) ?? null;
+  const current = tables.find((t) => t.name === sel) ?? tables[0] ?? null;
   return (
+    <>
+    <PageHeader crumb="Quản trị" title="Master data" subtitle="Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value)." />
     <section className="split">
       <aside className="card side">
-        <h3>Bảng master</h3>
+        <div className="card-head"><div className="card-title">Bảng master</div></div>
+        <div className="card-body">
         {list.error && <Alert kind="error">{list.error}</Alert>}
         <ul className="side-list">
           {tables.map((t) => (
             <li key={t.name}>
-              <button type="button" className={t.name === sel ? 'link active' : 'link'} onClick={() => setSel(t.name)}>
-                {t.name}
-              </button>{' '}
-              <span className="muted small">{t.rows.length} dòng</span>
+              <button type="button" className={t.name === current?.name ? 'side-item active' : 'side-item'} onClick={() => setSel(t.name)}>
+                <Icon name="table" size={16} />
+                <span className="side-name">{t.name}</span>
+                <span className="side-count">{t.rows.length}</span>
+              </button>
             </li>
           ))}
         </ul>
@@ -43,10 +48,11 @@ export function MastersPage() {
             Tạo
           </button>
         </div>
-        <p className="muted small">Cột đầu tiên là khoá tra cứu. Tham số dạng số (tỷ lệ, lương cơ sở…) đặt trong bảng Params (key, value).</p>
+        </div>
       </aside>
-      <div className="grow">{current ? <MasterEditor key={current.name + current.updated_at} table={current} onSaved={list.reload} onDeleted={() => (setSel(null), list.reload())} /> : <p className="muted">Chọn một bảng.</p>}</div>
+      <div className="grow">{current ? <MasterEditor key={current.name + current.updated_at} table={current} onSaved={list.reload} onDeleted={() => (setSel(null), list.reload())} /> : <div className="empty">Chưa có bảng master nào. Tạo bảng mới ở khung bên trái.</div>}</div>
     </section>
+    </>
   );
 }
 
@@ -137,12 +143,16 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
 
   return (
     <div className="card">
-      <div className="row gap wrap">
-        <h3>{table.name}</h3>
-        <span className="muted small">
-          {rows.length} dòng · {cols.length} cột{table.updated_at ? ` · sửa lần cuối ${table.updated_by}, ${new Date(table.updated_at).toLocaleString('vi-VN')}` : ''}
-        </span>
-        <span className="spacer" />
+      <div className="card-head">
+        <div className="card-title">
+          {table.name}
+          <span className="muted small">
+            {rows.length} dòng · {cols.length} cột{table.updated_at ? ` · sửa lần cuối ${table.updated_by}, ${new Date(table.updated_at).toLocaleString('vi-VN')}` : ''}
+          </span>
+        </div>
+      </div>
+      <div className="card-body">
+      <div className="toolbar">
         <button type="button" className="primary" disabled={!dirty} onClick={save}>
           Lưu
         </button>
@@ -170,7 +180,7 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
         </button>
       </div>
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      <div className="row gap">
+      <div className="toolbar">
         <input className="search" placeholder="Tìm…" value={q} onChange={(e) => setQ(e.target.value)} />
         <button type="button" onClick={() => change(() => setRows((rs) => [...rs, cols.map(() => null)]))}>
           + Dòng
@@ -207,6 +217,7 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
               <th></th>
               {cols.map((c, ci) => (
                 <th key={ci}>
+                  <div className="th-edit">
                   <input
                     className="cell head"
                     value={c}
@@ -231,6 +242,7 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
                       ✕
                     </button>
                   )}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -252,6 +264,7 @@ function MasterEditor({ table, onSaved, onDeleted }: { table: MasterTable & { up
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   );

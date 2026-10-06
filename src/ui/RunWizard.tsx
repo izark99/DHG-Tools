@@ -12,6 +12,7 @@ import { readSheets } from '../excel/read';
 import { ledgerFileName, writeForms } from '../excel/writeForms';
 import { Alert, download, useAsync, XLSX_TYPE } from './common';
 import { Preview } from './Preview';
+import { Card, Icon, PageHeader } from './layout';
 
 interface InputState {
   fileName: string;
@@ -39,12 +40,15 @@ export function RunWizard({
   masters,
   user,
   testMode,
+  embedded,
 }: {
   config: FlowConfig;
   version: number | null;
   masters: MasterTable[];
   user: User;
   testMode: boolean;
+  /** inside another page (flow editor): no page header */
+  embedded?: boolean;
 }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -245,11 +249,39 @@ export function RunWizard({
   };
 
   // ---- render -------------------------------------------------------------
+  const fieldLabel = (text: string, required?: boolean) => (
+    <span>
+      {text}
+      {required && <em className="req">*</em>}
+    </span>
+  );
+  const checklist: { ok: boolean; text: string }[] = [
+    { ok: !configErrors.length, text: configErrors.length ? `Cấu hình còn ${configErrors.length} lỗi` : 'Cấu hình flow hợp lệ' },
+    { ok: !paramsMissing.length, text: paramsMissing.length ? `Thiếu: ${paramsMissing.map((p) => p.label).join(', ')}` : `Kỳ ${String(month).padStart(2, '0')}/${year}` },
+    { ok: !inputsMissing.length, text: inputsMissing.length ? `Thiếu file: ${inputsMissing.map((d) => d.label || d.id).join(', ')}` : 'Đã có đủ file dữ liệu' },
+  ];
+  if (needLedger)
+    checklist.push({
+      ok: !gatesOpen.length,
+      text: gatesOpen.length ? 'Cần xác nhận cảnh báo ledger' : ledgerFile ? 'Đã chọn sổ ledger' : 'Ledger rỗng (lần chạy đầu)',
+    });
+  const errorCount = result ? result.issues.filter((i) => i.level === 'error').length : 0;
+
   return (
-    <section className="wizard">
-      <h2>
-        {config.name} <span className="muted">({config.id}{version ? ` · v${version}` : ''}{testMode ? ' · CHẠY THỬ' : ''})</span>
-      </h2>
+    <>
+      {!embedded && <PageHeader
+        crumb={
+          <>
+            <a href="#/">Chạy flow</a> <Icon name="chevron" size={12} /> {config.id}
+          </>
+        }
+        title={config.name}
+        subtitle={
+          <>
+            <span className="pill">{config.id}</span> {version ? <span className="pill pill-ok">v{version}</span> : null} {testMode ? <span className="pill pill-warn">Chạy thử</span> : null}
+          </>
+        }
+      />}
       {testMode && <Alert kind="warning">Chạy thử: file xuất có hậu tố _TEST, không ghi nhật ký chạy, không cập nhật dấu ledger.</Alert>}
       {configErrors.length > 0 && (
         <Alert kind="error">
@@ -264,176 +296,229 @@ export function RunWizard({
         </Alert>
       )}
 
-      <div className="card">
-        <h3>1. Kỳ và tham số</h3>
-        <div className="form-grid">
-          <label>
-            Tháng
-            <select
-              value={month}
-              onChange={(e) => {
-                invalidate();
-                setConfirm((c) => ({ ...c, replace: false }));
-                setMonth(Number(e.target.value));
-              }}
-            >
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {i + 1}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Năm
-            <input
-              type="number"
-              value={year}
-              min={2000}
-              max={2100}
-              onChange={(e) => {
-                invalidate();
-                setConfirm((c) => ({ ...c, replace: false }));
-                setYear(Number(e.target.value));
-              }}
-            />
-          </label>
-          {config.runParams.map((p) => (
-            <label key={p.id}>
-              {p.label}
-              {p.required ? ' *' : ''}
-              {p.type === 'master' ? (
+      <div className="run-layout">
+        <div className="run-main">
+          <Card step={1} title="Kỳ và tham số">
+            <div className="form-grid">
+              <label className="field">
+                {fieldLabel('Tháng')}
                 <select
-                  value={params[p.id] ?? ''}
+                  value={month}
                   onChange={(e) => {
                     invalidate();
-                    setParams({ ...params, [p.id]: e.target.value });
+                    setConfirm((c) => ({ ...c, replace: false }));
+                    setMonth(Number(e.target.value));
                   }}
                 >
-                  <option value="">— chọn —</option>
-                  {(masterMap[p.table ?? '']?.rows ?? []).map((r, i) => (
-                    <option key={i} value={String(r[0] ?? '')}>
-                      {String(r[0] ?? '')}
-                      {r[1] !== undefined && r[1] !== null ? ` — ${String(r[1])}` : ''}
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {i + 1}
                     </option>
                   ))}
                 </select>
-              ) : (
+              </label>
+              <label className="field">
+                {fieldLabel('Năm')}
                 <input
-                  type={p.type === 'number' ? 'number' : p.type === 'date' ? 'date' : 'text'}
-                  value={params[p.id] ?? ''}
+                  type="number"
+                  value={year}
+                  min={2000}
+                  max={2100}
                   onChange={(e) => {
                     invalidate();
-                    setParams({ ...params, [p.id]: e.target.value });
+                    setConfirm((c) => ({ ...c, replace: false }));
+                    setYear(Number(e.target.value));
                   }}
                 />
-              )}
-            </label>
-          ))}
-        </div>
-      </div>
+              </label>
+              {config.runParams.map((p) => (
+                <label key={p.id} className="field">
+                  {fieldLabel(p.label, p.required)}
+                  {p.type === 'master' ? (
+                    <select
+                      value={params[p.id] ?? ''}
+                      onChange={(e) => {
+                        invalidate();
+                        setParams({ ...params, [p.id]: e.target.value });
+                      }}
+                    >
+                      <option value="">— chọn —</option>
+                      {(masterMap[p.table ?? '']?.rows ?? []).map((r, i) => (
+                        <option key={i} value={String(r[0] ?? '')}>
+                          {String(r[0] ?? '')}
+                          {r[1] !== undefined && r[1] !== null ? ` — ${String(r[1])}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={p.type === 'number' ? 'number' : p.type === 'date' ? 'date' : 'text'}
+                      value={params[p.id] ?? ''}
+                      onChange={(e) => {
+                        invalidate();
+                        setParams({ ...params, [p.id]: e.target.value });
+                      }}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+          </Card>
 
-      <div className="card">
-        <h3>2. File dữ liệu</h3>
-        {config.inputs.map((def) => {
-          const st = inputs[def.id];
-          return (
-            <div key={def.id} className="input-block">
-              <div className="row gap wrap">
-                <strong>
-                  {def.label || def.id}
-                  {def.required ? ' *' : ''}
-                </strong>
-                <input type="file" accept=".xlsx,.xlsm" onChange={(e) => loadInput(def, e.target.files?.[0])} />
-                {st?.parsed && (
-                  <span className="ok-text">
-                    ✓ {st.parsed.rows.length} dòng · sheet "{st.parsed.sheet}" · tiêu đề ở dòng {st.parsed.headerRow + 1}
-                  </span>
+          <Card step={2} title="File dữ liệu">
+            {config.inputs.map((def) => {
+              const st = inputs[def.id];
+              return (
+                <div key={def.id} className="input-block">
+                  <FilePick
+                    label={def.label || def.id}
+                    required={def.required}
+                    accept=".xlsx,.xlsm"
+                    fileName={st?.fileName}
+                    status={st?.parsed ? `${st.parsed.rows.length} dòng · sheet "${st.parsed.sheet}" · tiêu đề ở dòng ${st.parsed.headerRow + 1}` : undefined}
+                    bad={!!st && (!!st.error || st.proposal.missingRequired.length > 0)}
+                    onFile={(f) => loadInput(def, f)}
+                    extra={
+                      st && !st.error ? (
+                        <button type="button" className="link" onClick={() => setInputs({ ...inputs, [def.id]: { ...st, showMapping: !st.showMapping } })}>
+                          {st.showMapping ? 'Ẩn mapping cột' : 'Xem / sửa mapping cột'}
+                        </button>
+                      ) : null
+                    }
+                  />
+                  {st?.error && <Alert kind="error">{st.error}</Alert>}
+                  {st && !st.error && st.proposal.missingRequired.length > 0 && (
+                    <Alert kind="warning">Chưa tìm thấy cột bắt buộc: {st.proposal.missingRequired.join(', ')}. Chọn cột tương ứng bên dưới.</Alert>
+                  )}
+                  {st && st.showMapping && !st.error && <MappingEditor def={def} st={st} onChange={(patch, f) => remap(def, patch, f)} />}
+                </div>
+              );
+            })}
+            {user.role === 'admin' && !testMode && Object.values(inputs).some((s) => s.picked.length) && (
+              <button type="button" onClick={saveAliases}>
+                <Icon name="save" size={16} /> Lưu các cột đã chọn tay làm alias (vào bản nháp flow)
+              </button>
+            )}
+
+            {needLedger && (
+              <div className="input-block">
+                <FilePick
+                  label="Sổ ledger (file mới nhất)"
+                  accept=".xlsx"
+                  fileName={ledgerFile?.name}
+                  status={
+                    ledgerFile
+                      ? `${ledgerFile.read.ledger.accrual.length} dòng trích · ${ledgerFile.read.ledger.actual.length} dòng chi${
+                          ledgerFile.read.ledger.meta ? ` · kỳ cuối ${ledgerFile.read.ledger.meta.lastPeriod} (${ledgerFile.read.ledger.meta.flow})` : ''
+                        }`
+                      : undefined
+                  }
+                  bad={!!ledgerErr}
+                  onFile={loadLedger}
+                />
+                {ledgerErr && <Alert kind="error">{ledgerErr}</Alert>}
+                {mark.error && <Alert kind="error">Không lấy được dấu ledger: {mark.error}</Alert>}
+                {!ledgerFile && !m && !mark.loading && <p className="hint">Chưa có ledger nào được ghi nhận — lần chạy đầu tiên bắt đầu từ ledger rỗng (số dư đầu kỳ = 0).</p>}
+                {gates.stale && (
+                  <Gate checked={confirm.stale} onChange={(v) => setConfirm({ ...confirm, stale: v })} kind="error">
+                    File ledger này <b>không phải bản mới nhất</b>. Bản mới nhất do <b>{m!.updated_by}</b> tạo lúc {new Date(m!.updated_at).toLocaleString('vi-VN')} (kỳ {m!.last_period}).
+                    Hãy lấy file mới nhất từ thư mục chung. Chỉ tiếp tục nếu chắc chắn.
+                  </Gate>
                 )}
-                {st && !st.error && (
-                  <button type="button" className="link" onClick={() => setInputs({ ...inputs, [def.id]: { ...st, showMapping: !st.showMapping } })}>
-                    {st.showMapping ? 'Ẩn mapping cột' : 'Xem / sửa mapping cột'}
-                  </button>
+                {gates.edited && (
+                  <Gate checked={confirm.edited} onChange={(v) => setConfirm({ ...confirm, edited: v })} kind="warning">
+                    Dữ liệu trong file ledger đã bị sửa ngoài ứng dụng (hash không khớp với sheet _meta).
+                  </Gate>
                 )}
+                {gates.empty && (
+                  <Gate checked={confirm.empty} onChange={(v) => setConfirm({ ...confirm, empty: v })} kind="error">
+                    Đã có ledger (kỳ {m!.last_period}, {m!.updated_by}, {new Date(m!.updated_at).toLocaleString('vi-VN')}) nhưng bạn chưa chọn file. Bắt đầu với ledger rỗng sẽ{' '}
+                    <b>mất toàn bộ lịch sử điều chỉnh</b>.
+                  </Gate>
+                )}
+                {gates.replace && (
+                  <Gate checked={confirm.replace} onChange={(v) => setConfirm({ ...confirm, replace: v })} kind="warning" label="Thay thế dữ liệu cũ của kỳ này">
+                    Ledger đã có dữ liệu của flow {config.id} cho kỳ {period}. Chọn "Thay thế" để ghi đè (không nhân đôi), hoặc đổi kỳ / huỷ.
+                  </Gate>
+                )}
+                {later.length > 0 && <Alert kind="warning">Ledger đã có các kỳ sau kỳ đang chạy ({later.join(', ')}). Số điều chỉnh của các kỳ đó sẽ không tự cập nhật.</Alert>}
               </div>
-              {st?.error && <Alert kind="error">{st.error}</Alert>}
-              {st && !st.error && st.proposal.missingRequired.length > 0 && (
-                <Alert kind="warning">Chưa tìm thấy cột bắt buộc: {st.proposal.missingRequired.join(', ')}. Chọn cột tương ứng bên dưới.</Alert>
-              )}
-              {st && st.showMapping && !st.error && <MappingEditor def={def} st={st} onChange={(patch, f) => remap(def, patch, f)} />}
-            </div>
-          );
-        })}
-        {user.role === 'admin' && !testMode && Object.values(inputs).some((s) => s.picked.length) && (
-          <button type="button" onClick={saveAliases}>
-            Lưu các cột đã chọn tay làm alias (vào bản nháp flow)
-          </button>
-        )}
-
-        {needLedger && (
-          <div className="input-block">
-            <div className="row gap wrap">
-              <strong>Sổ ledger (file mới nhất)</strong>
-              <input type="file" accept=".xlsx" onChange={(e) => loadLedger(e.target.files?.[0])} />
-              {ledgerFile && (
-                <span className="ok-text">
-                  ✓ {ledgerFile.read.ledger.accrual.length} dòng trích · {ledgerFile.read.ledger.actual.length} dòng chi
-                  {ledgerFile.read.ledger.meta ? ` · kỳ cuối ${ledgerFile.read.ledger.meta.lastPeriod} (${ledgerFile.read.ledger.meta.flow})` : ''}
-                </span>
-              )}
-            </div>
-            {ledgerErr && <Alert kind="error">{ledgerErr}</Alert>}
-            {mark.error && <Alert kind="error">Không lấy được dấu ledger: {mark.error}</Alert>}
-            {!ledgerFile && !m && !mark.loading && <p className="muted small">Chưa có ledger nào được ghi nhận — lần chạy đầu tiên bắt đầu từ ledger rỗng (số dư đầu kỳ = 0).</p>}
-            {gates.stale && (
-              <Gate checked={confirm.stale} onChange={(v) => setConfirm({ ...confirm, stale: v })} kind="error">
-                File ledger này <b>không phải bản mới nhất</b>. Bản mới nhất do <b>{m!.updated_by}</b> tạo lúc {new Date(m!.updated_at).toLocaleString('vi-VN')} (kỳ {m!.last_period}).
-                Hãy lấy file mới nhất từ thư mục chung. Chỉ tiếp tục nếu chắc chắn.
-              </Gate>
             )}
-            {gates.edited && (
-              <Gate checked={confirm.edited} onChange={(v) => setConfirm({ ...confirm, edited: v })} kind="warning">
-                Dữ liệu trong file ledger đã bị sửa ngoài ứng dụng (hash không khớp với sheet _meta).
-              </Gate>
-            )}
-            {gates.empty && (
-              <Gate checked={confirm.empty} onChange={(v) => setConfirm({ ...confirm, empty: v })} kind="error">
-                Đã có ledger (kỳ {m!.last_period}, {m!.updated_by}, {new Date(m!.updated_at).toLocaleString('vi-VN')}) nhưng bạn chưa chọn file. Bắt đầu với ledger rỗng sẽ{' '}
-                <b>mất toàn bộ lịch sử điều chỉnh</b>.
-              </Gate>
-            )}
-            {gates.replace && (
-              <Gate checked={confirm.replace} onChange={(v) => setConfirm({ ...confirm, replace: v })} kind="warning" label="Thay thế dữ liệu cũ của kỳ này">
-                Ledger đã có dữ liệu của flow {config.id} cho kỳ {period}. Chọn "Thay thế" để ghi đè (không nhân đôi), hoặc đổi kỳ / huỷ.
-              </Gate>
-            )}
-            {later.length > 0 && <Alert kind="warning">Ledger đã có các kỳ sau kỳ đang chạy ({later.join(', ')}). Số điều chỉnh của các kỳ đó sẽ không tự cập nhật.</Alert>}
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h3>3. Tính và kiểm tra</h3>
-        {paramsMissing.length > 0 && <p className="muted">Thiếu tham số: {paramsMissing.map((p) => p.label).join(', ')}</p>}
-        {inputsMissing.length > 0 && <p className="muted">Thiếu file: {inputsMissing.map((d) => d.label || d.id).join(', ')}</p>}
-        {gatesOpen.length > 0 && <p className="muted">Cần xác nhận các cảnh báo ledger ở trên.</p>}
-        <div className="row gap">
-          <button type="button" className="primary" disabled={!canCompute || !!busy} onClick={compute}>
-            Tính
-          </button>
-          {result && (
-            <button type="button" className="primary" disabled={result.blocked || !!busy} onClick={exportAll}>
-              Tải Form{result.ledgerOut ? ' + Ledger' : ''}
-            </button>
-          )}
-          {busy && <span className="muted">{busy}</span>}
+          </Card>
         </div>
-        {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-        {result?.blocked && <Alert kind="error">Có lỗi mức "error" — không thể xuất file. Sửa dữ liệu nguồn (hoặc cấu hình) rồi chạy lại.</Alert>}
+
+        <aside className="run-side">
+          <Card step={3} title="Tính và xuất file" className="sticky-card">
+            <ul className="checklist">
+              {checklist.map((c, i) => (
+                <li key={i} className={c.ok ? 'ok' : 'todo'}>
+                  <Icon name={c.ok ? 'check' : 'alert'} size={16} />
+                  <span>{c.text}</span>
+                </li>
+              ))}
+              <li className={!result ? 'todo' : result.blocked ? 'bad' : 'ok'}>
+                <Icon name={result && !result.blocked ? 'check' : 'alert'} size={16} />
+                <span>{!result ? 'Chưa tính' : result.blocked ? `${errorCount} lỗi — chưa xuất được` : 'Kiểm tra đạt, sẵn sàng xuất'}</span>
+              </li>
+            </ul>
+            <div className="side-actions">
+              <button type="button" className="primary block" disabled={!canCompute || !!busy} onClick={compute}>
+                <Icon name="calc" size={16} /> Tính
+              </button>
+              <button type="button" className="primary block" disabled={!result || result.blocked || !!busy} onClick={exportAll}>
+                <Icon name="download" size={16} /> Tải Form{needLedger ? ' + Ledger' : ''}
+              </button>
+            </div>
+            <div className="busy-slot">{busy && <span className="muted small">{busy}</span>}</div>
+            {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+          </Card>
+        </aside>
       </div>
 
       {result && <Preview config={config} result={result} />}
-    </section>
+    </>
+  );
+}
+
+function FilePick({
+  label,
+  required,
+  accept,
+  fileName,
+  status,
+  bad,
+  onFile,
+  extra,
+}: {
+  label: string;
+  required?: boolean;
+  accept: string;
+  fileName?: string;
+  status?: string;
+  bad?: boolean;
+  onFile: (f: File | undefined) => void;
+  extra?: React.ReactNode;
+}) {
+  return (
+    <div className={`file-pick${status ? ' done' : ''}${bad ? ' bad' : ''}`}>
+      <div className="file-icon">
+        <Icon name={status ? 'check' : 'file'} />
+      </div>
+      <div className="file-info">
+        <div className="file-label">
+          {label}
+          {required && <em className="req">*</em>}
+        </div>
+        <div className="file-status">{status ?? (fileName ? fileName : 'Chưa chọn file (.xlsx)')}</div>
+      </div>
+      <div className="file-actions">
+        {extra}
+        <label className="button">
+          <Icon name="upload" size={16} /> {fileName ? 'Đổi file' : 'Chọn file'}
+          <input type="file" accept={accept} hidden onChange={(e) => (onFile(e.target.files?.[0]), (e.target.value = ''))} />
+        </label>
+      </div>
+    </div>
   );
 }
 

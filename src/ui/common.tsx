@@ -26,12 +26,26 @@ export function Alert({ kind, children }: { kind: 'error' | 'warning' | 'info' |
   return <div className={`alert alert-${kind}`}>{children}</div>;
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: ReactNode }[]; value: T; onChange: (t: T) => void }) {
+export interface TabDef<T extends string> {
+  id: T;
+  label: ReactNode;
+  /** small counter after the label; fixed-width so labels never move */
+  count?: number;
+  tone?: 'error' | 'neutral';
+}
+
+/** Tab bar with a fixed height and no font-weight change on the active tab (no layout shift). */
+export function Tabs<T extends string>({ tabs, value, onChange, vertical }: { tabs: TabDef<T>[]; value: T; onChange: (t: T) => void; vertical?: boolean }) {
   return (
-    <div className="tabs">
+    <div className={vertical ? 'tabs vertical' : 'tabs'} role="tablist" aria-orientation={vertical ? 'vertical' : 'horizontal'}>
       {tabs.map((t) => (
-        <button key={t.id} type="button" className={t.id === value ? 'tab active' : 'tab'} onClick={() => onChange(t.id)}>
-          {t.label}
+        <button key={t.id} type="button" role="tab" aria-selected={t.id === value} className={t.id === value ? 'tab active' : 'tab'} onClick={() => onChange(t.id)}>
+          <span>{t.label}</span>
+          {t.count !== undefined && (
+            <span className={`tab-count${t.tone === 'error' ? (t.count > 0 ? ' tab-count-error' : ' zero') : ''}`} aria-hidden={t.tone === 'error' && t.count === 0}>
+              {t.count}
+            </span>
+          )}
         </button>
       ))}
     </div>
@@ -58,22 +72,21 @@ export function DataTable({ columns, rows, pageSize = 100, footer }: { columns: 
   const slice = filtered.slice(page * pageSize, (page + 1) * pageSize);
   return (
     <div>
-      <div className="row gap">
+      <div className="toolbar">
         <input className="search" placeholder="Tìm…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <span className="muted">{filtered.length} dòng</span>
-        {pages > 1 && (
-          <span className="row gap">
-            <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>
-              ‹
-            </button>
-            <span>
-              {page + 1}/{pages}
-            </span>
-            <button type="button" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
-              ›
-            </button>
+        <span className="muted small">{filtered.length} dòng</span>
+        <span className="spacer" />
+        <span className="pager">
+          <button type="button" className="icon-btn" disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="Trang trước">
+            ‹
+          </button>
+          <span className="small">
+            {page + 1}/{pages}
           </span>
-        )}
+          <button type="button" className="icon-btn" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} aria-label="Trang sau">
+            ›
+          </button>
+        </span>
       </div>
       <div className="table-wrap">
         <table className="grid">

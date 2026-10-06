@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { api, errMsg } from '../../api';
 import { Alert, download } from '../common';
+import { Card, Icon, PageHeader } from '../layout';
 
 export function BackupPage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   return (
-    <section>
-      <h2>Backup cấu hình</h2>
-      <p className="muted">File backup gồm toàn bộ flow (mọi phiên bản) và bảng master. Không có dữ liệu lương nào.</p>
+    <>
+      <PageHeader crumb="Quản trị" title="Backup cấu hình" subtitle="File backup gồm toàn bộ flow (mọi phiên bản) và bảng master. Không có dữ liệu lương nào." />
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      <div className="card row gap wrap">
+      <Card title="Xuất / nhập">
+      <div className="row gap wrap">
         <button
           type="button"
           className="primary"
@@ -23,10 +24,10 @@ export function BackupPage() {
             }
           }}
         >
-          Xuất backup (.json)
+          <Icon name="download" size={16} /> Xuất backup (.json)
         </button>
         <label className="button">
-          Nhập backup
+          <Icon name="upload" size={16} /> Nhập backup
           <input
             type="file"
             accept=".json"
@@ -47,6 +48,8 @@ export function BackupPage() {
           />
         </label>
       </div>
-    </section>
+      <p className="hint">Nhập backup: bảng master cùng tên bị thay thế; cấu hình mỗi flow được nạp thành bản nháp và cần publish lại.</p>
+      </Card>
+    </>
   );
 }
