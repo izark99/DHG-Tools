@@ -2,14 +2,20 @@ import { useState } from 'react';
 import { api, errMsg } from '../../api';
 import { Alert, download } from '../common';
 import { Card, Icon, PageHeader } from '../layout';
+import { Guide, T } from '../texts';
 
 export function BackupPage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   return (
     <>
-      <PageHeader crumb="Quản trị" title="Backup cấu hình" subtitle="File backup gồm toàn bộ flow (mọi phiên bản) và bảng master. Không có dữ liệu lương nào." />
+      <PageHeader
+        crumb={<T k="nav.group.admin">Quản trị</T>}
+        title={<T k="backup.title">Backup cấu hình</T>}
+        subtitle={<T k="backup.subtitle">File backup gồm toàn bộ flow (mọi phiên bản), bảng master và văn bản giao diện. Không có dữ liệu lương nào.</T>}
+      />
+      <Guide k="backup.guide" />
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      <Card title="Xuất / nhập">
+      <Card title={<T k="backup.card">Xuất / nhập</T>}>
       <div className="row gap wrap">
         <button
           type="button"
@@ -40,7 +46,7 @@ export function BackupPage() {
                 const data = JSON.parse(await f.text());
                 if (!confirm('Nhập backup: bảng master cùng tên sẽ bị THAY THẾ; cấu hình mỗi flow được nạp thành BẢN NHÁP (cần publish). Tiếp tục?')) return;
                 const r = await api.importBackup(data);
-                setMsg({ kind: 'ok', text: `Đã nhập ${r.masters} bảng master và ${r.flows} flow (dạng bản nháp).` });
+                setMsg({ kind: 'ok', text: `Đã nhập ${r.masters} bảng master, ${r.flows} flow (dạng bản nháp) và ${r.texts} văn bản giao diện.` });
               } catch (e2) {
                 setMsg({ kind: 'error', text: errMsg(e2) });
               }
@@ -48,7 +54,9 @@ export function BackupPage() {
           />
         </label>
       </div>
-      <p className="hint">Nhập backup: bảng master cùng tên bị thay thế; cấu hình mỗi flow được nạp thành bản nháp và cần publish lại.</p>
+      <p className="hint">
+        <T k="backup.hint">Nhập backup: bảng master và văn bản giao diện cùng tên bị thay thế; cấu hình mỗi flow được nạp thành bản nháp và cần publish lại.</T>
+      </p>
       </Card>
     </>
   );

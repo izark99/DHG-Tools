@@ -293,6 +293,52 @@ describe('browser end-to-end', () => {
     await ctx.close();
   });
 
+  it('admin edits interface texts in place; other users see them; reset restores the default', async () => {
+    const title = `Chạy lương kỳ này ${RUN}`;
+    for (const k of ['home.title', 'home.guide']) await api('DELETE', `/api/ui-texts/${k}`);
+    await page.goto(`${BASE}/#/`);
+    await page.reload();
+    const h1 = page.locator('.page-header h1');
+    await h1.getByText('Chọn flow để chạy').waitFor();
+    const before = await h1.boundingBox();
+    await page.getByRole('button', { name: 'Chỉnh sửa giao diện', exact: true }).click();
+    await page.locator('.edit-bar').waitFor();
+    // edit mode only adds an outline: the title does not move
+    expect(await h1.boundingBox()).toEqual(before);
+
+    await page.locator('[data-text-key="home.title"]').click();
+    await page.getByLabel('Nội dung').fill(title);
+    await page.getByLabel('Nội dung').press('Enter');
+    await h1.getByText(title).waitFor();
+    await page.locator('[data-text-key="home.guide"]').click();
+    await page.getByLabel('Nội dung').fill('Quy trình hằng tháng:\n- Tải file lương\n- Kiểm tra trước khi tải');
+    await page.getByLabel('Nội dung').press('Control+Enter');
+    await page.locator('.guide li').getByText('Tải file lương').waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/texts-edit.png`, fullPage: true });
+    await page.locator('.edit-bar').getByRole('button', { name: 'Xong' }).click();
+    expect(await page.locator('.ui-text').count()).toBe(0);
+
+    // the user account created above sees the new texts
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(BASE);
+    await p.getByLabel('Tên đăng nhập').fill(`e2e${RUN}`);
+    await p.getByLabel('Mật khẩu').fill('UserPass56789');
+    await p.getByRole('button', { name: 'Đăng nhập' }).click();
+    await p.locator('.page-header h1').getByText(title).waitFor();
+    await p.locator('.guide').getByText('Kiểm tra trước khi tải').waitFor();
+    expect(await p.getByRole('button', { name: 'Chỉnh sửa giao diện', exact: true }).count()).toBe(0);
+    await ctx.close();
+
+    // reset from Admin › Giao diện
+    await page.goto(`${BASE}/#/admin/texts`);
+    for (const k of ['home.title', 'home.guide']) await page.locator('tr', { hasText: k }).getByRole('button', { name: 'Khôi phục mặc định' }).click();
+    await page.getByText('Chưa sửa văn bản nào').waitFor();
+    await page.goto(`${BASE}/#/`);
+    await h1.getByText('Chọn flow để chạy').waitFor();
+    expect(await page.locator('.guide').count()).toBe(0);
+  });
+
   it('no CSP violation or page error happened', () => {
     expect(problems.join('\n')).toBe('');
   });

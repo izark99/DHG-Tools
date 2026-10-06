@@ -48,6 +48,17 @@ c=$(post /api/masters/Params '{"columns":["key","value"],"rows":[]}' "$X" PUT); 
 c=$(get /api/backup "$X"); [ "$c" = 403 ] && ok "user → backup 403" || ko "user backup" "$c"
 c=$(post /api/flows '{"id":"X1","name":"x"}' "$X"); [ "$c" = 403 ] && ok "user → create flow 403" || ko "user create flow" "$c"
 
+# interface texts: admin writes, everyone signed in reads, only login / brand texts before sign-in
+c=$(post /api/ui-texts/home.guide '{"value":"Hướng dẫn nội bộ"}' "$A" PUT); [ "$c" = 200 ] && ok "admin sets a page text" || ko "admin put text" "$c $(cat /tmp/b.$$)"
+c=$(post /api/ui-texts/login.sub '{"value":"Liên hệ phòng NS"}' "$A" PUT); [ "$c" = 200 ] && ok "admin sets a login text" || ko "admin put login text" "$c"
+c=$(post /api/ui-texts/home.title '{"value":"x"}' "$X" PUT); [ "$c" = 403 ] && ok "user → PUT text 403" || ko "user put text" "$c"
+c=$(post /api/ui-texts/home.title '' "$X" DELETE); [ "$c" = 403 ] && ok "user → DELETE text 403" || ko "user delete text" "$c"
+c=$(get /api/ui-texts "$X"); grep -q 'Hướng dẫn nội bộ' /tmp/b.$$ && ok "user reads texts" || ko "user texts" "$c $(cat /tmp/b.$$)"
+c=$(get /api/ui-texts); [ "$c" = 200 ] && grep -q 'login.sub' /tmp/b.$$ && ! grep -q 'home.guide' /tmp/b.$$ && ok "no session → only login texts" || ko "public texts" "$c $(cat /tmp/b.$$)"
+c=$(post /api/ui-texts/home.title "{\"value\":\"$(head -c 4100 /dev/zero | tr '\0' a)\"}" "$A" PUT); [ "$c" = 400 ] && ok "text longer than 4000 rejected" || ko "text length" "$c"
+c=$(post /api/ui-texts/home.guide '' "$A" DELETE); c2=$(post /api/ui-texts/login.sub '' "$A" DELETE)
+[ "$c$c2" = 200200 ] && ok "admin resets texts" || ko "reset texts" "$c $c2"
+
 for i in 1 2 3 4 5; do c=$(post /api/login "{\"username\":\"$N\",\"password\":\"wrong-password-$i\"}"); done
 [ "$c" = 401 ] && ok "5 wrong passwords rejected" || ko "wrong pw" "$c"
 c=$(post /api/login "{\"username\":\"$N\",\"password\":\"UserPass56789\"}")

@@ -4,6 +4,7 @@ import type { FlowConfig } from '../../engine/types';
 import { Alert, useAsync } from '../common';
 import { Card, Icon, PageHeader } from '../layout';
 import { blankConfig } from './blank';
+import { Guide, T } from '../texts';
 
 export function FlowsPage() {
   const list = useAsync(() => api.flows(), []);
@@ -25,10 +26,15 @@ export function FlowsPage() {
 
   return (
     <>
-      <PageHeader crumb="Quản trị" title="Flows" subtitle="Mỗi flow là một bộ cấu hình: input, công thức, cost item, Form 02/03, kiểm tra. Người dùng luôn chạy phiên bản publish mới nhất." />
+      <PageHeader
+        crumb={<T k="nav.group.admin">Quản trị</T>}
+        title={<T k="flows.title">Flows</T>}
+        subtitle={<T k="flows.subtitle">Mỗi flow là một bộ cấu hình: input, công thức, cost item, Form 02/03, kiểm tra. Người dùng luôn chạy phiên bản publish mới nhất.</T>}
+      />
+      <Guide k="flows.guide" />
       {list.error && <Alert kind="error">{list.error}</Alert>}
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
-      <Card title="Danh sách flow">
+      <Card title={<T k="flows.list">Danh sách flow</T>}>
       <div className="table-wrap">
         <table className="grid">
           <thead>
@@ -82,7 +88,7 @@ export function FlowsPage() {
       </div>
       </Card>
 
-      <Card title="Tạo flow mới">
+      <Card title={<T k="flows.new">Tạo flow mới</T>}>
         <div className="form-grid">
           <label className="field">
             Mã flow (A-Z, 0-9, _)

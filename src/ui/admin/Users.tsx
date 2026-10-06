@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, errMsg, type User } from '../../api';
 import { Alert, useAsync } from '../common';
 import { Card, initials, PageHeader } from '../layout';
+import { Guide, T } from '../texts';
 
 function tempPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -28,10 +29,15 @@ export function UsersPage({ me }: { me: User }) {
 
   return (
     <>
-      <PageHeader crumb="Quản trị" title="Người dùng" subtitle="Tạo tài khoản với mật khẩu tạm, phân quyền, đặt lại mật khẩu, khoá tài khoản." />
+      <PageHeader
+        crumb={<T k="nav.group.admin">Quản trị</T>}
+        title={<T k="users.title">Người dùng</T>}
+        subtitle={<T k="users.subtitle">Tạo tài khoản với mật khẩu tạm, phân quyền, đặt lại mật khẩu, khoá tài khoản.</T>}
+      />
+      <Guide k="users.guide" />
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       {list.error && <Alert kind="error">{list.error}</Alert>}
-      <Card title="Danh sách tài khoản">
+      <Card title={<T k="users.list">Danh sách tài khoản</T>}>
       <div className="table-wrap">
         <table className="grid">
           <thead>
@@ -102,7 +108,7 @@ export function UsersPage({ me }: { me: User }) {
       </div>
       </Card>
 
-      <Card title="Tạo tài khoản">
+      <Card title={<T k="users.new">Tạo tài khoản</T>}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -1,9 +1,10 @@
-// Admin: export / import the whole configuration (flows + master tables) as one JSON file.
+// Admin: export / import the whole configuration (flows + master tables + interface texts) as one JSON file.
 // Import replaces master tables with the same name and loads each flow's config as a DRAFT
 // (the admin reviews and publishes it); no published version is changed.
 import { body, error, json, now, requireAdmin, route, type Handler } from '../_lib/http';
 import { cleanConfig, FLOW_ID } from '../_lib/flows';
 import { allMasters, cleanTable } from '../_lib/masters';
+import { cleanText, UPSERT_TEXT } from '../_lib/texts';
 
 export const onRequestGet: Handler = route(async ({ env, data }) => {
   requireAdmin(data);
@@ -27,6 +28,7 @@ export const onRequestGet: Handler = route(async ({ env, data }) => {
         .map((v) => ({ version: v.version, status: v.status, created_by: v.created_by, created_at: v.created_at, config: JSON.parse(v.config_json) })),
     })),
     masters: (await allMasters(env.DB)).map((t) => ({ name: t.name, columns: t.columns, rows: t.rows })),
+    texts: (await env.DB.prepare('SELECT key, value FROM ui_texts ORDER BY key').all<{ key: string; value: string }>()).results,
   });
 });
 
@@ -41,7 +43,12 @@ interface ImportFlow {
 
 export const onRequestPost: Handler = route(async ({ request, env, data }) => {
   const me = requireAdmin(data);
-  const b = await body<{ kind?: string; flows?: ImportFlow[]; masters?: { name: string; columns: unknown; rows: unknown }[] }>(request, 20_000_000);
+  const b = await body<{
+    kind?: string;
+    flows?: ImportFlow[];
+    masters?: { name: string; columns: unknown; rows: unknown }[];
+    texts?: { key: unknown; value: unknown }[];
+  }>(request, 20_000_000);
   if (b.kind !== 'cb-forms-backup') return error(400, 'Không phải file backup của ứng dụng');
   const stmts: D1PreparedStatement[] = [];
   const t = now();
@@ -77,6 +84,11 @@ export const onRequestPost: Handler = route(async ({ request, env, data }) => {
     );
     flowCount++;
   }
+  const texts = Array.isArray(b.texts) ? b.texts : [];
+  for (const x of texts) {
+    const c = cleanText(x?.key, x?.value);
+    stmts.push(env.DB.prepare(UPSERT_TEXT).bind(c.key, c.value, me.username, t));
+  }
   if (stmts.length) await env.DB.batch(stmts);
-  return json({ ok: true, masters: (b.masters ?? []).length, flows: flowCount });
+  return json({ ok: true, masters: (b.masters ?? []).length, flows: flowCount, texts: texts.length });
 });

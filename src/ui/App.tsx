@@ -6,9 +6,11 @@ import { RunPage, RunFromFile } from './RunPage';
 import { MastersPage } from './admin/Masters';
 import { UsersPage } from './admin/Users';
 import { BackupPage } from './admin/Backup';
+import { TextsPage } from './admin/Texts';
 import { Icon, initials, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
+import { EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
 
 function useHash(): string {
   const [h, setH] = useState(() => window.location.hash.slice(1) || '/');
@@ -27,6 +29,7 @@ export const go = (path: string) => {
 export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const hash = useHash();
+  const editMode = useEditMode();
 
   const refresh = useCallback(() => {
     api.me().then(
@@ -38,6 +41,12 @@ export function App() {
     setUnauthorizedHandler(() => setUser(null));
     refresh();
   }, [refresh]);
+  // texts readable by this session: login-page texts before sign-in, all of them after
+  const signedIn = !!user;
+  useEffect(() => {
+    void loadTexts();
+  }, [signedIn]);
+  useEffect(() => setTextAdmin(user?.role === 'admin' && !user.must_change_password), [user]);
 
   if (user === undefined) return <div className="center muted">Đang tải…</div>;
   if (user === null) return <Login onLogin={setUser} />;
@@ -53,16 +62,19 @@ export function App() {
   else if (parts[0] === 'admin' && parts[1] === 'masters') page = <MastersPage />;
   else if (parts[0] === 'admin' && parts[1] === 'users') page = <UsersPage me={user} />;
   else if (parts[0] === 'admin' && parts[1] === 'backup') page = <BackupPage />;
+  else if (parts[0] === 'admin' && parts[1] === 'texts') page = <TextsPage />;
   else if (parts[0] === 'admin' && parts[1] === 'flows' && parts[2]) page = <FlowEditorPage flowId={decodeURIComponent(parts[2])} user={user} />;
   else if (parts[0] === 'admin' && parts[1] === 'flows') page = <FlowsPage />;
   else page = <Home user={user} />;
 
-  const nav = (to: string, label: string, icon: string) => {
+  const nav = (to: string, key: string, label: string, icon: string) => {
     const active = to === '/' ? hash === '/' || hash.startsWith('/run') : hash.startsWith(to);
     return (
       <a href={`#${to}`} className={active ? 'nav-item active' : 'nav-item'}>
         <Icon name={icon} />
-        <span>{label}</span>
+        <span>
+          <T k={key}>{label}</T>
+        </span>
       </a>
     );
   };
@@ -74,21 +86,30 @@ export function App() {
         <div className="brand">
           <div className="brand-logo">CB</div>
           <div>
-            <div className="brand-name">C&amp;B Forms</div>
-            <div className="brand-sub">Compensation &amp; Benefits</div>
+            <div className="brand-name">
+              <T k="brand.name">C&B Forms</T>
+            </div>
+            <div className="brand-sub">
+              <T k="brand.sub">Compensation & Benefits</T>
+            </div>
           </div>
         </div>
         <nav className="nav">
-          <div className="nav-group">Vận hành</div>
-          {nav('/', 'Chạy flow', 'play')}
-          {nav('/run-file', 'Chạy thử từ JSON', 'file')}
+          <div className="nav-group">
+            <T k="nav.group.run">Vận hành</T>
+          </div>
+          {nav('/', 'nav.run', 'Chạy flow', 'play')}
+          {nav('/run-file', 'nav.runFile', 'Chạy thử từ JSON', 'file')}
           {isAdmin && (
             <>
-              <div className="nav-group">Quản trị</div>
-              {nav('/admin/flows', 'Flows', 'flow')}
-              {nav('/admin/masters', 'Master data', 'table')}
-              {nav('/admin/users', 'Người dùng', 'users')}
-              {nav('/admin/backup', 'Backup cấu hình', 'archive')}
+              <div className="nav-group">
+                <T k="nav.group.admin">Quản trị</T>
+              </div>
+              {nav('/admin/flows', 'nav.flows', 'Flows', 'flow')}
+              {nav('/admin/masters', 'nav.masters', 'Master data', 'table')}
+              {nav('/admin/users', 'nav.users', 'Người dùng', 'users')}
+              {nav('/admin/texts', 'nav.texts', 'Giao diện', 'pen')}
+              {nav('/admin/backup', 'nav.backup', 'Backup cấu hình', 'archive')}
             </>
           )}
         </nav>
@@ -100,6 +121,18 @@ export function App() {
               <span className="user-role">{isAdmin ? 'Quản trị viên' : 'Người dùng'}</span>
             </span>
           </a>
+          {isAdmin && (
+            <button
+              type="button"
+              className={editMode ? 'icon-btn on' : 'icon-btn'}
+              title={editMode ? 'Tắt chỉnh sửa giao diện' : 'Chỉnh sửa giao diện (tiêu đề, hướng dẫn)'}
+              aria-label="Chỉnh sửa giao diện"
+              aria-pressed={editMode}
+              onClick={() => setEditMode(!editMode)}
+            >
+              <Icon name="pen" />
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn"
@@ -117,6 +150,8 @@ export function App() {
         <div className="content-inner">{page}</div>
       </main>
       <Toaster />
+      <EditModeBar />
+      <TextEditor />
     </div>
   );
 }

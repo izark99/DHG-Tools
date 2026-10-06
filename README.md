@@ -39,7 +39,7 @@ Cookie phiên có cờ `Secure`; Chromium chấp nhận cookie này trên `127.0
 ```bash
 npx wrangler login
 npx wrangler d1 create cb-forms              # chép database_id vào wrangler.toml
-npx wrangler d1 migrations apply cb-forms --remote
+npx wrangler d1 migrations apply cb-forms --remote   # chạy lại mỗi khi có migration mới (vd. 0002_ui_texts)
 npx wrangler pages project create cb-forms
 npm run build && npx wrangler pages deploy dist
 ```
@@ -74,6 +74,11 @@ ADMIN_PASSWORD=... npm run test:e2e        # Chromium: tạo/publish/rollback fl
 3. **User** chọn flow → nhập kỳ, tham số → tải file lương (+ file ledger mới nhất) → **Tính** → xem lỗi/kiểm tra,
    preview → **Tải Form + Ledger** (một thao tác tải cả hai file). Lưu file ledger mới vào thư mục chung;
    lần chạy sau app so hash và cảnh báo nếu dùng file cũ.
+4. **Admin** sửa tiêu đề, mô tả, hướng dẫn ngay trên giao diện: bấm nút bút chì ở góc dưới sidebar (hoặc
+   **Quản trị › Giao diện**). Chữ có viền nét đứt là sửa được: bấm vào, sửa, **Lưu** (áp dụng cho mọi người
+   ngay). Mỗi trang có khung **Hướng dẫn** (chỉ hiện khi có nội dung); trang chạy flow có hướng dẫn chung và
+   hướng dẫn riêng từng flow. Trang **Giao diện** liệt kê văn bản đã sửa, khôi phục mặc định, và cho sửa chữ
+   của trang đăng nhập qua bản xem trước. Văn bản giao diện nằm trong file backup.
 
 ## Ngôn ngữ công thức (tóm tắt)
 

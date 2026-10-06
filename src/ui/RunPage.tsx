@@ -4,6 +4,7 @@ import type { FlowConfig } from '../engine/types';
 import { Alert, readFileText, useAsync } from './common';
 import { Card, PageHeader } from './layout';
 import { RunWizard } from './RunWizard';
+import { Guide, T } from './texts';
 
 /** Run the latest published version of a flow. */
 export function RunPage({ flowId, user }: { flowId: string; user: User }) {
@@ -35,8 +36,17 @@ export function RunFromFile({ user }: { user: User }) {
   const masters = useAsync(() => api.masters(), []);
   return (
     <>
-      {!config && <PageHeader crumb="Vận hành" title="Chạy thử từ file JSON" subtitle="Kết quả có hậu tố _TEST, không ghi nhật ký và không cập nhật dấu ledger." />}
-      <Card title="File cấu hình flow (.json)">
+      {!config && (
+        <>
+          <PageHeader
+            crumb={<T k="nav.group.run">Vận hành</T>}
+            title={<T k="runFile.title">Chạy thử từ file JSON</T>}
+            subtitle={<T k="runFile.subtitle">Kết quả có hậu tố _TEST, không ghi nhật ký và không cập nhật dấu ledger.</T>}
+          />
+          <Guide k="runFile.guide" />
+        </>
+      )}
+      <Card title={<T k="runFile.card">File cấu hình flow (.json)</T>}>
       <input
         type="file"
         accept=".json,application/json"

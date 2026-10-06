@@ -2,6 +2,47 @@ import { useState, type FormEvent } from 'react';
 import { api, errMsg, type User } from '../api';
 import { Alert } from './common';
 import { Card, Icon, PageHeader } from './layout';
+import { T } from './texts';
+
+/** Heading of the login form. */
+export function LoginHead() {
+  return (
+    <>
+      <h2>
+        <T k="login.title">Đăng nhập</T>
+      </h2>
+      <p className="muted">
+        <T k="login.sub">Tài khoản do quản trị viên cấp.</T>
+      </p>
+    </>
+  );
+}
+
+/** Left panel of the login page (also previewed on Admin › Giao diện, where it can be edited). */
+export function LoginBrand() {
+  return (
+    <div className="auth-brand">
+      <div className="brand-logo lg">CB</div>
+      <h1>
+        <T k="brand.name">C&B Forms</T>
+      </h1>
+      <p>
+        <T k="login.tagline">Tổng hợp trích & chi lương — Form 02 / Form 03 gửi Kế toán.</T>
+      </p>
+      <ul>
+        <li>
+          <Icon name="check" /> <T k="login.point1">Dữ liệu lương chỉ xử lý trên trình duyệt của bạn</T>
+        </li>
+        <li>
+          <Icon name="check" /> <T k="login.point2">Cấu hình flow, công thức do admin quản lý</T>
+        </li>
+        <li>
+          <Icon name="check" /> <T k="login.point3">Xuất Excel đúng mẫu in, kèm sổ ledger điều chỉnh</T>
+        </li>
+      </ul>
+    </div>
+  );
+}
 
 export function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [username, setUsername] = useState('');
@@ -24,26 +65,10 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
   };
   return (
     <div className="auth">
-      <div className="auth-brand">
-        <div className="brand-logo lg">CB</div>
-        <h1>C&amp;B Forms</h1>
-        <p>Tổng hợp trích &amp; chi lương — Form 02 / Form 03 gửi Kế toán.</p>
-        <ul>
-          <li>
-            <Icon name="check" /> Dữ liệu lương chỉ xử lý trên trình duyệt của bạn
-          </li>
-          <li>
-            <Icon name="check" /> Cấu hình flow, công thức do admin quản lý
-          </li>
-          <li>
-            <Icon name="check" /> Xuất Excel đúng mẫu in, kèm sổ ledger điều chỉnh
-          </li>
-        </ul>
-      </div>
+      <LoginBrand />
       <div className="auth-form">
         <form className="auth-card" onSubmit={submit}>
-          <h2>Đăng nhập</h2>
-          <p className="muted">Tài khoản do quản trị viên cấp.</p>
+          <LoginHead />
           <label className="field">
             <span>Tên đăng nhập</span>
             <input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -126,8 +151,8 @@ export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: (
 export function Account({ onChanged }: { onChanged: () => void }) {
   return (
     <>
-      <PageHeader title="Tài khoản" subtitle="Đổi mật khẩu đăng nhập" />
-      <Card title="Đổi mật khẩu" className="narrow-card">
+      <PageHeader title={<T k="account.title">Tài khoản</T>} subtitle={<T k="account.subtitle">Đổi mật khẩu đăng nhập</T>} />
+      <Card title={<T k="account.card">Đổi mật khẩu</T>} className="narrow-card">
         <PasswordForm onDone={onChanged} />
       </Card>
     </>

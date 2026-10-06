@@ -1,9 +1,12 @@
-// Every /api route: security headers, CSRF origin check, session required (except login).
+// Every /api route: security headers, CSRF origin check, session required (except login and the
+// public read of interface texts).
 import { error, SECURITY_HEADERS, type Handler } from '../_lib/http';
 import { sessionUser } from '../_lib/session';
 
 const PUBLIC = new Set(['/api/login']);
-const ALLOWED_WHILE_MUST_CHANGE = new Set(['/api/me', '/api/password', '/api/logout']);
+/** GET without a session is allowed; the handler limits what it returns (login-page texts). */
+const PUBLIC_GET = new Set(['/api/ui-texts']);
+const ALLOWED_WHILE_MUST_CHANGE = new Set(['/api/me', '/api/password', '/api/logout', '/api/ui-texts']);
 
 function withHeaders(res: Response): Response {
   const r = new Response(res.body, res);
@@ -23,6 +26,8 @@ export const onRequest: Handler = async (ctx) => {
 
   if (!PUBLIC.has(path)) {
     const user = await sessionUser(env.DB, request);
+    const optional = request.method === 'GET' && PUBLIC_GET.has(path);
+    if (!user && optional) return withHeaders(await ctx.next());
     if (!user) return withHeaders(error(401, 'Chưa đăng nhập'));
     if (user.must_change_password && !ALLOWED_WHILE_MUST_CHANGE.has(path))
       return withHeaders(error(403, 'Cần đổi mật khẩu trước khi tiếp tục'));

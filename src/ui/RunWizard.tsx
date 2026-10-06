@@ -13,6 +13,7 @@ import { ledgerFileName, writeForms } from '../excel/writeForms';
 import { Alert, download, useAsync, XLSX_TYPE } from './common';
 import { Preview } from './Preview';
 import { Card, Icon, PageHeader } from './layout';
+import { Guide, T } from './texts';
 
 interface InputState {
   fileName: string;
@@ -272,7 +273,10 @@ export function RunWizard({
       {!embedded && <PageHeader
         crumb={
           <>
-            <a href="#/">Chạy flow</a> <Icon name="chevron" size={12} /> {config.id}
+            <a href="#/">
+              <T k="nav.run">Chạy flow</T>
+            </a>{' '}
+            <Icon name="chevron" size={12} /> {config.id}
           </>
         }
         title={config.name}
@@ -282,6 +286,8 @@ export function RunWizard({
           </>
         }
       />}
+      {!embedded && <Guide k="run.guide" addLabel="Thêm hướng dẫn chung cho mọi flow" />}
+      {!embedded && <Guide k={`flow.${config.id}.guide`} addLabel={`Thêm hướng dẫn riêng cho flow ${config.id}`} />}
       {testMode && <Alert kind="warning">Chạy thử: file xuất có hậu tố _TEST, không ghi nhật ký chạy, không cập nhật dấu ledger.</Alert>}
       {configErrors.length > 0 && (
         <Alert kind="error">
@@ -298,7 +304,7 @@ export function RunWizard({
 
       <div className="run-layout">
         <div className="run-main">
-          <Card step={1} title="Kỳ và tham số">
+          <Card step={1} title={<T k="run.step1">Kỳ và tham số</T>}>
             <div className="form-grid">
               <label className="field">
                 {fieldLabel('Tháng')}
@@ -383,7 +389,7 @@ export function RunWizard({
             </div>
           </Card>
 
-          <Card step={2} title="File dữ liệu">
+          <Card step={2} title={<T k="run.step2">File dữ liệu</T>}>
             {config.inputs.map((def) => {
               const st = inputs[def.id];
               return (
@@ -436,7 +442,9 @@ export function RunWizard({
                 />
                 {ledgerErr && <Alert kind="error">{ledgerErr}</Alert>}
                 {mark.error && <Alert kind="error">Không lấy được dấu ledger: {mark.error}</Alert>}
-                {!ledgerFile && !m && !mark.loading && <p className="hint">Chưa có ledger nào được ghi nhận — lần chạy đầu tiên bắt đầu từ ledger rỗng (số dư đầu kỳ = 0).</p>}
+                {!ledgerFile && !m && !mark.loading && <p className="hint">
+                    <T k="run.ledger.none">Chưa có ledger nào được ghi nhận — lần chạy đầu tiên bắt đầu từ ledger rỗng (số dư đầu kỳ = 0).</T>
+                  </p>}
                 {gates.stale && (
                   <Gate checked={confirm.stale} onChange={(v) => setConfirm({ ...confirm, stale: v })} kind="error">
                     File ledger này <b>không phải bản mới nhất</b>. Bản mới nhất do <b>{m!.updated_by}</b> tạo lúc {new Date(m!.updated_at).toLocaleString('vi-VN')} (kỳ {m!.last_period}).
@@ -466,7 +474,7 @@ export function RunWizard({
         </div>
 
         <aside className="run-side">
-          <Card step={3} title="Tính và xuất file" className="sticky-card">
+          <Card step={3} title={<T k="run.step3">Tính và xuất file</T>} className="sticky-card">
             <ul className="checklist">
               {checklist.map((c, i) => (
                 <li key={i} className={c.ok ? 'ok' : 'todo'}>

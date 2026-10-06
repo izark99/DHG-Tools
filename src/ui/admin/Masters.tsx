@@ -5,6 +5,7 @@ import type { MasterTable, Scalar } from '../../engine/types';
 import { tableToXlsx, xlsxToTable } from '../../excel/masterFile';
 import { Alert, download, useAsync, XLSX_TYPE } from '../common';
 import { Icon, PageHeader } from '../layout';
+import { Guide, T } from '../texts';
 
 const PAGE = 100;
 
@@ -16,7 +17,12 @@ export function MastersPage() {
   const current = tables.find((t) => t.name === sel) ?? tables[0] ?? null;
   return (
     <>
-    <PageHeader crumb="Quản trị" title="Master data" subtitle="Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value)." />
+    <PageHeader
+      crumb={<T k="nav.group.admin">Quản trị</T>}
+      title={<T k="masters.title">Master data</T>}
+      subtitle={<T k="masters.subtitle">Bảng tra cứu dùng chung cho mọi flow. Cột đầu tiên là khoá. Tham số dạng số đặt trong bảng Params (key, value).</T>}
+    />
+    <Guide k="masters.guide" />
     <section className="split">
       <aside className="card side">
         <div className="card-head"><div className="card-title">Bảng master</div></div>

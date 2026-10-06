@@ -1,6 +1,7 @@
 import { api, type User } from '../api';
 import { Alert, useAsync } from './common';
 import { Icon, PageHeader } from './layout';
+import { Guide, T } from './texts';
 
 export function Home({ user }: { user: User }) {
   const flows = useAsync(() => api.flows(), []);
@@ -13,7 +14,16 @@ export function Home({ user }: { user: User }) {
 
   return (
     <>
-      <PageHeader crumb="Vận hành" title="Chọn flow để chạy" subtitle={`Xin chào ${hello}. Chọn một flow, tải file lương và xuất Form 02 / Form 03.`} />
+      <PageHeader
+        crumb={<T k="nav.group.run">Vận hành</T>}
+        title={<T k="home.title">Chọn flow để chạy</T>}
+        subtitle={
+          <T k="home.subtitle" vars={{ name: hello }}>
+            {'Xin chào {name}. Chọn một flow, tải file lương và xuất Form 02 / Form 03.'}
+          </T>
+        }
+      />
+      <Guide k="home.guide" />
       {flows.error && <Alert kind="error">{flows.error}</Alert>}
 
       <div className="stats">
@@ -23,7 +33,9 @@ export function Home({ user }: { user: User }) {
           </div>
           <div>
             <div className="stat-value">{ready}</div>
-            <div className="stat-label">Flow sẵn sàng chạy</div>
+            <div className="stat-label">
+              <T k="home.stat.ready">Flow sẵn sàng chạy</T>
+            </div>
           </div>
         </div>
         <div className="stat">
@@ -41,7 +53,9 @@ export function Home({ user }: { user: User }) {
           </div>
           <div>
             <div className="stat-value">0</div>
-            <div className="stat-label">Dòng lương lưu trên server</div>
+            <div className="stat-label">
+              <T k="home.stat.server">Dòng lương lưu trên server</T>
+            </div>
           </div>
         </div>
       </div>
@@ -63,7 +77,9 @@ export function Home({ user }: { user: User }) {
                     <Icon name="play" size={16} /> Chạy
                   </a>
                 ) : (
-                  <span className="muted small">Admin cần publish trước khi chạy.</span>
+                  <span className="muted small">
+                    <T k="home.notPublished">Admin cần publish trước khi chạy.</T>
+                  </span>
                 )}
               </div>
             </div>
@@ -73,8 +89,12 @@ export function Home({ user }: { user: User }) {
       {flows.data && !active.length && (
         <div className="empty">
           <Icon name="flow" size={32} />
-          <div>Chưa có flow nào.</div>
-          <div className="muted">{user.role === 'admin' ? 'Vào Quản trị › Flows để tạo flow đầu tiên.' : 'Liên hệ quản trị viên.'}</div>
+          <div>
+            <T k="home.empty">Chưa có flow nào.</T>
+          </div>
+          <div className="muted">
+            {user.role === 'admin' ? <T k="home.empty.admin">Vào Quản trị › Flows để tạo flow đầu tiên.</T> : <T k="home.empty.user">Liên hệ quản trị viên.</T>}
+          </div>
         </div>
       )}
     </>

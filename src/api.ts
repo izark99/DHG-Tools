@@ -117,7 +117,11 @@ export const api = {
   logRun: (flow_id: string, flow_version: number | null, period: string) => call('POST', '/api/runs', { flow_id, flow_version, period }),
 
   backup: () => call<unknown>('GET', '/api/backup'),
-  importBackup: (data: unknown) => call<{ ok: true; masters: number; flows: number }>('POST', '/api/backup', data),
+  importBackup: (data: unknown) => call<{ ok: true; masters: number; flows: number; texts: number }>('POST', '/api/backup', data),
+
+  texts: () => call<{ texts: Record<string, string> }>('GET', '/api/ui-texts'),
+  putText: (key: string, value: string) => call<{ ok: true; key: string; value: string }>('PUT', `/api/ui-texts/${enc(key)}`, { value }),
+  deleteText: (key: string) => call('DELETE', `/api/ui-texts/${enc(key)}`),
 };
 
 export function errMsg(e: unknown): string {
