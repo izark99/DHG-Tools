@@ -348,6 +348,7 @@ function Editor({
               { key: 'costCenterColumn', label: 'Cột ghi đè Cost Center', kind: 'select', options: empCols, nullable: true },
               { key: 'accrue', label: 'Trích (Form 02)', kind: 'bool' },
               { key: 'pay', label: 'Chi (Form 03)', kind: 'bool' },
+              { key: 'unitFilter', label: 'Áp dụng cho đơn vị (tuỳ chọn — thay cho cột Key; ví dụ CC("Key") = "SB")', kind: 'formula', optional: true, info: () => at({ kind: 'unitFilter' }) },
             ]}
           />
         </div>

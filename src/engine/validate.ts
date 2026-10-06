@@ -112,6 +112,7 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
     if (!['M', 'Q', 'H', 'Y'].includes(c.periodType)) err(p, 'Loại kỳ phải là M/Q/H/Y');
     if (!c.budget) err(p, 'Thiếu Budget');
     if (!empCols.includes(c.amount)) err(p, `Cột số tiền "${c.amount}" không có trong bảng nhân viên`);
+    check(p, c.unitFilter, at({ kind: 'unitFilter' }), false);
     for (const k of ['employeeAmount', 'helperColumn', 'costCenterColumn'] as const) {
       const v = c[k];
       if (v && !empCols.includes(v)) err(p, `${k}: cột "${v}" không có trong bảng nhân viên`);

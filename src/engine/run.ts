@@ -343,6 +343,25 @@ export function runFlow(ctx: RunContext): RunResult {
   };
 
   const itemByHelper = new Map(config.costItems.map((c) => [normKey(c.helper), c]));
+  const itemUnit = new Map<string, boolean>();
+  const itemAppliesTo = (ci: CostItem, unit: string): boolean => {
+    const k = `${normKey(ci.helper)}|${normKey(unit)}`;
+    let v = itemUnit.get(k);
+    if (v === undefined) {
+      v = true;
+      const node = compile(ci.unitFilter!);
+      if (node instanceof FormulaError) issues.add('error', 'formula', `Cost item ${ci.helper} — bộ lọc đơn vị: ${node.message}`);
+      else
+        try {
+          v = toBool(evaluate(node, unitEnv(unit)));
+        } catch (e) {
+          if (!(e instanceof FormulaError)) throw e;
+          issues.add('error', 'formula', `Cost item ${ci.helper} — bộ lọc đơn vị: ${e.message}`, unit);
+        }
+      itemUnit.set(k, v);
+    }
+    return v;
+  };
   const empByUnit = new Map<string, EmpEnv[]>();
   const groups = new Map<string, AggRow>();
 
@@ -372,6 +391,10 @@ export function runFlow(ctx: RunContext): RunResult {
 
     for (const { ci, amount, emp } of amounts) {
       if (amount === 0 && emp === 0) continue;
+      if (ci.unitFilter && ci.unitFilter.trim() && !itemAppliesTo(ci, unit)) {
+        issues.add('warning', 'aggregation', `Cost item ${ci.helper} không áp dụng cho đơn vị này (bộ lọc đơn vị của cost item) — số tiền bị loại khỏi Form`, `${e.key} (${unit})`);
+        continue;
+      }
       let budget: string;
       if (ccTable && ccTable.columns.includes(ci.budget)) {
         budget = str(ccRow[ci.budget]);

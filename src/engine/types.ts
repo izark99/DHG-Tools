@@ -66,6 +66,12 @@ export interface CostItem {
   pay: boolean;
   /** Optional employee column whose non-blank value overrides the Helper. */
   helperColumn?: string | null;
+  /**
+   * Optional formula in unit scope (row.unit, CC("col") …): the units this cost item applies to.
+   * Replaces the workbooks' Cost Code × Unit join on "Key". Amounts on other units are left out
+   * of the forms and reported as a warning (Excel drops them silently).
+   */
+  unitFilter?: string | null;
   /** Optional employee column whose non-blank value overrides the Cost Center. */
   costCenterColumn?: string | null;
 }

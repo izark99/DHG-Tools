@@ -116,6 +116,19 @@ describe('checks', () => {
   });
 });
 
+describe('cost item unit filter (Key join in the workbooks)', () => {
+  it('leaves out amounts on units the item does not apply to, with a warning', () => {
+    const cfg = config();
+    cfg.costItems[2] = { ...cfg.costItems[2], unitFilter: 'row.unit = "U2"' }; // allowance only for U2
+    const res = runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month: 9, year: 2026 }, ledger: emptyLedger() });
+    expect(res.form02!.rows.some((r) => r.row.helper === '0319_PC')).toBe(false);
+    const w = res.issues.find((i) => /không áp dụng cho đơn vị/.test(i.message))!;
+    expect(w.level).toBe('warning');
+    expect(w.count).toBe(2);
+    expect(res.blocked).toBe(false);
+  });
+});
+
 describe('ledger across 3 periods where payment ≠ accrual', () => {
   // Accrual of 0301 = basic; payment (actual) = UNITSUM(emp.paid)
   const cfg = config();
