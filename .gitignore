@@ -1,0 +1,7 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+*.local.sql
+/reference/*
+!/reference/README.md

@@ -1,0 +1,307 @@
+import { describe, expect, it } from 'vitest';
+import { proposeMapping, readInput, type RawSheet } from './inputs';
+import { emptyLedger, hasRowsFor, ledgerHash, type Ledger } from './ledger';
+import { runFlow } from './run';
+import type { FlowConfig, FormDef, MasterTable } from './types';
+import { validateConfig, contextFromMasters } from './validate';
+
+// Small synthetic fixture — every code here is test data, not application logic.
+const masters: Record<string, MasterTable> = {
+  CostCenter: {
+    name: 'CostCenter',
+    columns: ['Unit', 'Dept', 'Cost Center', 'Sector', 'HR', 'AT'],
+    rows: [
+      ['U1', 'D1', 'CC1', 'DHG', 'HR100', 'AT100'],
+      ['U2', 'D2', 'CC2', 'KBH', 'HR200', 'AT200'],
+      ['UZ9', 'D9', 'CC9', 'KBH', 'HR900', 'AT900'],
+    ],
+  },
+  Params: { name: 'Params', columns: ['key', 'value'], rows: [['si_rate', '0.175']] },
+};
+
+const layout = (sheetName: string) => ({
+  sheetName,
+  companyName: 'CÔNG TY TEST',
+  titleVi: 'BẢNG TEST - THÁNG {MM}.{YYYY}',
+  titleEn: 'TEST - {MM}.{YYYY}',
+  signatures: [{ title: 'Người lập', nameParam: 'preparer' }],
+});
+
+function config(over: Partial<FlowConfig> = {}): FlowConfig {
+  const form02: FormDef = {
+    enabled: true,
+    prefix: 'Trích',
+    adjust: true,
+    ledgerFeed: { sheet: 'accrual', amountColumn: 'accrual' },
+    columns: [
+      { id: 'no', headerVi: 'STT', headerEn: 'No', formula: 'row.no', type: 'number', total: false },
+      { id: 'desc', headerVi: 'Diễn giải', headerEn: 'Description', formula: 'row.description', type: 'text' },
+      { id: 'accrual', headerVi: 'Trích kỳ này', headerEn: 'Accrual', formula: 'row.amount', type: 'number' },
+      { id: 'adj', headerVi: 'Điều chỉnh', headerEn: 'Adjusted', formula: 'row.adjusted', type: 'number' },
+      { id: 'actual', headerVi: 'Thực trích', headerEn: 'Actual accrual', formula: '[accrual]+[adj]', type: 'number' },
+    ],
+    layout: layout('Form 02'),
+  };
+  const form03: FormDef = {
+    enabled: true,
+    prefix: 'Chi',
+    adjust: false,
+    ledgerFeed: { sheet: 'actual', amountColumn: 'gross' },
+    columns: [
+      { id: 'no', headerVi: 'STT', headerEn: 'No', formula: 'row.no', type: 'number', total: false },
+      { id: 'desc', headerVi: 'Diễn giải', headerEn: 'Description', formula: 'row.description', type: 'text' },
+      { id: 'gross', headerVi: 'Tổng', headerEn: 'Gross', formula: 'row.amount', type: 'number' },
+      { id: 'si', headerVi: 'BHXH', headerEn: 'SI', formula: 'IF(row.costCode IN ("0301"), UNITSUM(emp.si), 0)', type: 'number' },
+      { id: 'pit', headerVi: 'TNCN', headerEn: 'PIT', formula: 'IF(row.costCode = "0301", UNITSUM(emp.pit), 0)', type: 'number' },
+      { id: 'loan', headerVi: 'Vay', headerEn: 'Loan', formula: '0', type: 'number', hideIfZeroTotal: true },
+      { id: 'net', headerVi: 'Thực lãnh', headerEn: 'Take-home', formula: '[gross]-[si]-[pit]-[loan]', type: 'number' },
+    ],
+    layout: layout('Form 03'),
+  };
+  return {
+    schemaVersion: 1,
+    id: 'T1',
+    name: 'Test flow',
+    fileName: 'Form_T1_T{MM}.{YYYY}.xlsx',
+    inputs: [
+      {
+        id: 'SalaryTable',
+        label: 'Bảng lương',
+        required: true,
+        key: 'emp_id',
+        fields: [
+          { id: 'emp_id', type: 'text', required: true, aliases: ['Mã NV'] },
+          { id: 'name', type: 'text', aliases: ['Họ'] },
+          { id: 'unit', type: 'text', required: true, aliases: ['Đơn vị'] },
+          { id: 'basic', type: 'number', aliases: ['Lương thời gian'] },
+          { id: 'bonus', type: 'number', aliases: ['Thưởng'] },
+          { id: 'allowance', type: 'number', aliases: ['Phụ cấp'] },
+          { id: 'si', type: 'number', aliases: ['BHXH NV'] },
+          { id: 'pit', type: 'number', aliases: ['Thuế TNCN'] },
+          { id: 'paid', type: 'number', aliases: ['Thực chi'] },
+        ],
+      },
+    ],
+    runParams: [{ id: 'preparer', label: 'Người lập', type: 'text' }],
+    employeeTable: {
+      source: 'SalaryTable',
+      rowFilter: null,
+      columns: [
+        { id: 'emp_id', label: 'Mã NV', formula: 'in.SalaryTable.emp_id', type: 'text' },
+        { id: 'unit', label: 'Đơn vị', formula: 'FIRST(in.SalaryTable.unit)', type: 'text' },
+        { id: 'basic', label: 'Lương', formula: 'SUMOF(in.SalaryTable.basic)', type: 'number' },
+        { id: 'bonusQ', label: 'Thưởng quý', formula: 'in.SalaryTable.bonus', type: 'number' },
+        { id: 'allow', label: 'Phụ cấp', formula: 'in.SalaryTable.allowance', type: 'number' },
+        { id: 'ins', label: 'BH công ty', formula: 'ROUND([basic] * P.si_rate, 0)', type: 'number' },
+        { id: 'si', label: 'BHXH NV', formula: 'in.SalaryTable.si', type: 'number' },
+        { id: 'pit', label: 'TNCN', formula: 'in.SalaryTable.pit', type: 'number' },
+        { id: 'paid', label: 'Thực chi', formula: 'in.SalaryTable.paid', type: 'number' },
+      ],
+    },
+    costItems: [
+      { helper: '0301_LT', costCode: '0301', nameVi: 'Lương thời gian', periodType: 'M', budget: 'HR', amount: 'basic', accrue: true, pay: true },
+      { helper: '0317Q_ST', costCode: '0317', nameVi: 'Thưởng quý', periodType: 'Q', budget: 'AT', amount: 'bonusQ', accrue: true, pay: false },
+      { helper: '0319_PC', costCode: '0319', nameVi: 'Phụ cấp', periodType: 'M', budget: 'BUD999', amount: 'allow', accrue: true, pay: true },
+      { helper: '0401_BH', costCode: '0401', nameVi: 'BHXH công ty', periodType: 'M', budget: 'HR', amount: 'ins', accrue: true, pay: false },
+    ],
+    aggregation: {
+      unitColumn: 'unit',
+      costCenterTable: 'CostCenter',
+      deptColumn: 'Dept',
+      costCenterColumn: 'Cost Center',
+      sectorColumn: 'Sector',
+      unitFilter: 'NOT(CONTAINS(row.unit, "Z"))',
+      descriptionTemplate: '{prefix} {name}_{period}_{dept}-{unit}',
+    },
+    forms: { form02, form03 },
+    checks: [
+      { id: 'dup', level: 'error', scope: 'employee', formula: 'COUNTSAME([emp_id]) = 1', message: 'Trùng mã nhân viên' },
+      { id: 'pit_total', level: 'error', scope: 'total', formula: 'SUM(f03.pit) = SUM(in.SalaryTable.pit)', message: 'TNCN phân bổ ≠ tổng TNCN' },
+      { id: 'one_pit_row', level: 'warning', scope: 'form03', formula: 'UNITCOUNT([pit] <> 0) <= 1', message: 'Đơn vị có 2 dòng nhận TNCN' },
+    ],
+    ...over,
+  };
+}
+
+const HEADER = ['         Mã  NV ', '   Họ   ', 'Đơn\nvị', 'Lương thời gian', 'Thưởng', 'Phụ cấp', 'BHXH NV', 'Thuế TNCN', 'Thực chi'];
+
+function sheetOf(rows: (string | number | null)[][]): RawSheet[] {
+  return [{ name: 'Sheet1', rows: [['BẢNG LƯƠNG THÁNG'], [], HEADER, ...rows, [null, 'Tổng cộng', null, 999999999]] }];
+}
+
+function parsed(cfg: FlowConfig, rows: (string | number | null)[][]) {
+  const sheets = sheetOf(rows);
+  const def = cfg.inputs[0];
+  const prop = proposeMapping(sheets, def)!;
+  expect(prop.missingRequired).toEqual([]);
+  return { SalaryTable: readInput(sheets, def, prop) };
+}
+
+const EMPS: (string | number | null)[][] = [
+  ['0022', 'An', 'U1', 10_000_000, 2_000_000, 500_000, 1_050_000, 300_000, 0],
+  ['0101', 'Bình', 'U1', 8_000_000, 0, 500_000, 840_000, 100_000, 0],
+  ['0200', 'Chi', 'U2', 12_000_000, 3_000_000, null, 1_260_000, 500_000, 0],
+];
+
+describe('input reader', () => {
+  it('detects a padded, multi-line header and keeps leading zeros', () => {
+    const cfg = config();
+    const inp = parsed(cfg, EMPS).SalaryTable;
+    expect(inp.headerRow).toBe(2);
+    expect(inp.rows.map((r) => r.emp_id)).toEqual(['0022', '0101', '0200']);
+    expect(inp.skippedBlankKey).toBe(1);
+  });
+});
+
+describe('config validation', () => {
+  it('fixture config is valid', () => {
+    expect(validateConfig(config(), contextFromMasters(masters))).toEqual([]);
+  });
+  it('catches forward reference and unknown function', () => {
+    const cfg = config();
+    cfg.employeeTable.columns[2].formula = '[ins] + FOO(1)';
+    const errs = validateConfig(cfg, contextFromMasters(masters)).map((e) => e.message);
+    expect(errs.some((m) => /đứng sau/.test(m))).toBe(true);
+    expect(errs.some((m) => /FOO/.test(m))).toBe(true);
+  });
+});
+
+describe('hand-computed fixture: 3 employees, 2 units, 4 cost items', () => {
+  const cfg = config();
+  const r = runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month: 9, year: 2026, preparer: 'X' }, ledger: emptyLedger() });
+
+  it('has no issues', () => {
+    // only the informative "skipped total row" warning
+    expect(r.issues.map((i) => [i.level, i.source])).toEqual([['warning', 'input']]);
+    expect(r.blocked).toBe(false);
+  });
+
+  it('Form 02 rows', () => {
+    const rows = r.form02!.rows.map((x) => [x.row.unit, x.row.budgetCode, x.row.helper, x.values.accrual, x.values.adj, x.values.actual, x.values.no]);
+    expect(rows).toEqual([
+      ['U1', 'AT100', '0317Q_ST', 2_000_000, 0, 2_000_000, 1],
+      ['U1', 'BUD999', '0319_PC', 1_000_000, 0, 1_000_000, 2],
+      ['U1', 'HR100', '0301_LT', 18_000_000, 0, 18_000_000, 3],
+      ['U1', 'HR100', '0401_BH', 3_150_000, 0, 3_150_000, 4],
+      ['U2', 'AT200', '0317Q_ST', 3_000_000, 0, 3_000_000, 5],
+      ['U2', 'HR200', '0301_LT', 12_000_000, 0, 12_000_000, 6],
+      ['U2', 'HR200', '0401_BH', 2_100_000, 0, 2_100_000, 7],
+    ]);
+    expect(r.form02!.rows[0].values.desc).toBe('Trích Thưởng quý_Q03.2026_D1-U1');
+    expect(r.form02!.rows[2].values.desc).toBe('Trích Lương thời gian_T09.2026_D1-U1');
+    expect(r.form02!.totals.accrual).toBe(41_250_000);
+    expect(r.form02!.rows[0].row.sector).toBe('DHG');
+    expect(r.form02!.rows[0].row.costCenter).toBe('CC1');
+  });
+
+  it('Form 03 rows with unit-level deductions and hidden zero column', () => {
+    const rows = r.form03!.rows.map((x) => [x.row.unit, x.row.helper, x.values.gross, x.values.si, x.values.pit, x.values.net]);
+    expect(rows).toEqual([
+      ['U1', '0319_PC', 1_000_000, 0, 0, 1_000_000],
+      ['U1', '0301_LT', 18_000_000, 1_890_000, 400_000, 15_710_000],
+      ['U2', '0301_LT', 12_000_000, 1_260_000, 500_000, 10_240_000],
+    ]);
+    expect(r.form03!.hidden).toEqual(['loan']);
+    expect(r.form03!.rows[0].values.desc).toBe('Chi Phụ cấp_T09.2026_D1-U1');
+  });
+
+  it('writes ledger rows for this period', () => {
+    expect(r.ledgerOut!.accrual).toHaveLength(7);
+    expect(r.ledgerOut!.actual).toHaveLength(3);
+    expect(r.ledgerOut!.accrual.every((x) => x.period === '2026-09' && x.flow === 'T1')).toBe(true);
+  });
+
+  it('employee codes keep leading zeros', () => {
+    expect(r.employees.map((e) => e.key)).toEqual(['0022', '0101', '0200']);
+    expect(r.employees[0].values.emp_id).toBe('0022');
+  });
+});
+
+describe('checks', () => {
+  it('duplicate employee code and missing unit are errors', () => {
+    const cfg = config();
+    const rows = [...EMPS, ['0022', 'An 2', 'U1', 1, 0, 0, 0, 0, 0], ['0300', 'Dũng', 'NOPE', 5, 0, 0, 0, 0, 0]];
+    const res = runFlow({ config: cfg, masters, inputs: parsed(cfg, rows), run: { month: 9, year: 2026 }, ledger: emptyLedger() });
+    // duplicate source rows collapse into one employee; SUMOF adds the basic salary of both rows
+    expect(res.employees.find((e) => e.key === '0022')!.values.basic).toBe(10_000_001);
+    expect(res.blocked).toBe(true);
+    expect(res.issues.some((i) => /không có trong CostCenter/.test(i.message) && i.keys[0].startsWith('0300'))).toBe(true);
+  });
+  it('total check fails when PIT is not fully allocated', () => {
+    const cfg = config();
+    cfg.forms.form03.columns[4].formula = 'IF(row.costCode = "0301", UNITSUM(emp.pit), 0) - 1';
+    const res = runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month: 9, year: 2026 }, ledger: emptyLedger() });
+    expect(res.issues.find((i) => i.source === 'pit_total')?.level).toBe('error');
+  });
+  it('division by zero is reported as an error, not NaN', () => {
+    const cfg = config();
+    cfg.employeeTable.columns[5].formula = '[basic] / 0';
+    const res = runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month: 9, year: 2026 }, ledger: emptyLedger() });
+    expect(res.blocked).toBe(true);
+    expect(res.issues[0].message).toMatch(/DIV/);
+    expect(res.issues[0].count).toBe(3);
+  });
+  it('units filtered out by unitFilter are excluded', () => {
+    const cfg = config();
+    const res = runFlow({
+      config: cfg,
+      masters,
+      inputs: parsed(cfg, [...EMPS, ['0900', 'Z', 'UZ9', 1_000, 0, 0, 0, 0, 0]]),
+      run: { month: 9, year: 2026 },
+      ledger: emptyLedger(),
+    });
+    expect(res.form02!.rows.some((x) => x.row.unit === 'UZ9')).toBe(false);
+    expect(res.blocked).toBe(false);
+  });
+});
+
+describe('ledger across 3 periods where payment ≠ accrual', () => {
+  // Accrual of 0301 = basic; payment (actual) = UNITSUM(emp.paid)
+  const cfg = config();
+  cfg.costItems = [cfg.costItems[0]];
+  cfg.forms.form03.columns = [
+    { id: 'gross', headerVi: 'Tổng', headerEn: 'Gross', formula: 'UNITSUM(emp.paid)', type: 'number' },
+  ];
+  cfg.checks = [];
+  const run = (month: number, rows: (string | number | null)[][], ledger: Ledger) =>
+    runFlow({ config: cfg, masters, inputs: parsed(cfg, rows), run: { month, year: 2026 }, ledger });
+  const emp = (id: string, unit: string, basic: number, paid: number) => [id, 'x', unit, basic, 0, 0, 0, 0, paid];
+
+  it('produces the expected adjustments', async () => {
+    // P1: U1 accrues 100, pays 90; U2 accrues 50, pays 70
+    const r1 = run(7, [emp('01', 'U1', 100, 90), emp('02', 'U2', 50, 70)], emptyLedger());
+    expect(r1.form02!.rows.map((x) => [x.row.unit, x.values.accrual, x.values.adj, x.values.actual])).toEqual([
+      ['U1', 100, 0, 100],
+      ['U2', 50, 0, 50],
+    ]);
+    const l1 = r1.ledgerOut!;
+    // P2: U1 accrues 100 (balance 90-100 = -10), pays 120; U2 has no employees (balance 70-50 = +20)
+    const r2 = run(8, [emp('01', 'U1', 100, 120)], l1);
+    expect(r2.form02!.rows.map((x) => [x.row.unit, x.values.accrual, x.values.adj, x.values.actual])).toEqual([
+      ['U1', 100, -10, 90],
+      ['U2', 0, 20, 20],
+    ]);
+    expect(r2.form02!.rows[1].values.desc).toBe('Trích Lương thời gian_T08.2026_D2-U2');
+    // P3: U1 balance = (90+120) - (100+90) = 20; U2 balance = 70 - (50+20) = 0 → dropped
+    const r3 = run(9, [emp('01', 'U1', 100, 100)], r2.ledgerOut!);
+    expect(r3.form02!.rows.map((x) => [x.row.unit, x.values.accrual, x.values.adj, x.values.actual])).toEqual([['U1', 100, 20, 120]]);
+    expect(hasRowsFor(r3.ledgerOut!, 'T1', '2026-09')).toBe(true);
+
+    // Re-running P2 against the P3 ledger replaces P2 rows instead of duplicating them,
+    // and the adjustment still only looks at earlier periods.
+    const r2b = run(8, [emp('01', 'U1', 100, 120)], r3.ledgerOut!);
+    expect(r2b.form02!.rows.map((x) => x.values.adj)).toEqual([-10, 20]);
+    expect(r2b.ledgerOut!.accrual.filter((x) => x.period === '2026-08')).toHaveLength(2);
+    expect(await ledgerHash(r2b.ledgerOut!)).toBe(await ledgerHash(r3.ledgerOut!));
+  });
+
+  it('adjusts only cost items this flow accrues', () => {
+    const other = config({ id: 'T2' });
+    other.costItems = [{ ...other.costItems[0], accrue: false }];
+    other.forms.form03.columns = [{ id: 'gross', headerVi: 'Tổng', headerEn: 'Gross', formula: 'UNITSUM(emp.paid)', type: 'number' }];
+    other.checks = [];
+    const l = run(7, [emp('01', 'U1', 100, 90)], emptyLedger()).ledgerOut!;
+    const res = runFlow({ config: other, masters, inputs: parsed(other, [emp('01', 'U1', 100, 90)]), run: { month: 8, year: 2026 }, ledger: l });
+    expect(res.form02!.rows).toEqual([]);
+  });
+});

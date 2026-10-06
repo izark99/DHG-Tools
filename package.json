@@ -1,0 +1,31 @@
+{
+  "name": "dhg-cb-forms",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.functions.json && tsc -p tsconfig.node.json",
+    "test": "vitest run",
+    "pages:dev": "wrangler pages dev dist --d1 DB --compatibility-date=2024-11-01",
+    "db:migrate:local": "wrangler d1 migrations apply cb-forms --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cb-forms --remote"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}
