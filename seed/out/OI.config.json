@@ -1,0 +1,1352 @@
+{
+  "schemaVersion": 1,
+  "id": "OI",
+  "name": "OI — Trích & chi các khoản thu nhập khác",
+  "ledger": "shared",
+  "fileName": "Form_OI_{cost}_T{MM}.{YYYY}.xlsx",
+  "inputs": [
+    {
+      "id": "SalaryTable",
+      "label": "Danh sách chi (Salary Table)",
+      "required": true,
+      "key": "emp_id",
+      "fields": [
+        {
+          "id": "emp_id",
+          "label": "Mã NV",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã NV"
+          ]
+        },
+        {
+          "id": "dv",
+          "label": "Mã ĐV",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Mã ĐV"
+          ]
+        },
+        {
+          "id": "unit",
+          "label": "Mã BP",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã BP"
+          ]
+        },
+        {
+          "id": "name",
+          "label": "Họ tên",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Họ tên"
+          ]
+        },
+        {
+          "id": "gross",
+          "label": "Tổng lãnh",
+          "type": "number",
+          "required": true,
+          "aliases": [
+            "Tổng lãnh"
+          ]
+        },
+        {
+          "id": "pit",
+          "label": "Thuế TN",
+          "type": "number",
+          "required": false,
+          "aliases": [
+            "Thuế TN"
+          ]
+        },
+        {
+          "id": "other",
+          "label": "Trừ khác",
+          "type": "number",
+          "required": false,
+          "aliases": [
+            "Trừ khác"
+          ]
+        },
+        {
+          "id": "net",
+          "label": "Thực lãnh",
+          "type": "number",
+          "required": false,
+          "aliases": [
+            "Thực lãnh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SalarySetting",
+      "label": "Thiết lập lương (Salary Setting) — cho kiểm tra 0311M / 0311H",
+      "required": false,
+      "key": "emp_id",
+      "fields": [
+        {
+          "id": "emp_id",
+          "label": "Mã NV",
+          "type": "text",
+          "required": true,
+          "aliases": [
+            "Mã NV"
+          ]
+        },
+        {
+          "id": "grade",
+          "label": "Hạng",
+          "type": "text",
+          "required": false,
+          "aliases": [
+            "Hạng"
+          ]
+        }
+      ]
+    }
+  ],
+  "runParams": [
+    {
+      "id": "cost",
+      "label": "Khoản chi (chọn khoản)",
+      "type": "costItem",
+      "required": true
+    },
+    {
+      "id": "name_vn",
+      "label": "Tên khoản (VN) nếu muốn đổi",
+      "type": "text"
+    },
+    {
+      "id": "name_en",
+      "label": "Tên khoản (EN) nếu muốn đổi",
+      "type": "text"
+    },
+    {
+      "id": "hr_manager",
+      "label": "Trưởng Phòng Nhân sự (tên in)",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "reporter",
+      "label": "Người đề nghị (tên in)",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "id": "general_director",
+      "label": "Tổng giám đốc (tên in)",
+      "type": "text",
+      "default": ""
+    }
+  ],
+  "employeeTable": {
+    "source": "SalaryTable",
+    "rowFilter": null,
+    "columns": [
+      {
+        "id": "emp_id",
+        "label": "Mã NV",
+        "formula": "in.SalaryTable.emp_id",
+        "type": "text"
+      },
+      {
+        "id": "dv",
+        "label": "Mã ĐV",
+        "formula": "in.SalaryTable.dv",
+        "type": "text"
+      },
+      {
+        "id": "unit",
+        "label": "Mã BP",
+        "formula": "in.SalaryTable.unit",
+        "type": "text"
+      },
+      {
+        "id": "name",
+        "label": "Họ và tên",
+        "formula": "in.SalaryTable.name",
+        "type": "text"
+      },
+      {
+        "id": "gross",
+        "label": "Tổng lãnh",
+        "formula": "ROUND(SUMOF(in.SalaryTable.gross), 0)",
+        "type": "number"
+      },
+      {
+        "id": "pit",
+        "label": "Thuế TN",
+        "formula": "ROUND(SUMOF(in.SalaryTable.pit), 0)",
+        "type": "number"
+      },
+      {
+        "id": "other",
+        "label": "Trừ khác",
+        "formula": "ROUND(SUMOF(in.SalaryTable.other), 0)",
+        "type": "number"
+      },
+      {
+        "id": "net",
+        "label": "Thực lãnh",
+        "formula": "ROUND(SUMOF(in.SalaryTable.net), 0)",
+        "type": "number"
+      },
+      {
+        "id": "sbwh",
+        "label": "SB/WH",
+        "formula": "LOOKUP(\"CostCenter\", [unit], \"SB/WH\", \"\")",
+        "type": "text",
+        "show": false
+      },
+      {
+        "id": "helper",
+        "label": "Helper",
+        "formula": "IF(AND(run.cost = \"0407Q_PQ\", IN([sbwh], \"SB\", \"WH\")), \"2002Q\", IF(run.cost = \"0407M_BD\", IF(RIGHT([emp_id], 2) = \"SC\", \"0407M_SC\", \"0407M_BD\"), run.cost))",
+        "type": "text"
+      },
+      {
+        "id": "cc_override",
+        "label": "TTCP (ngoại lệ)",
+        "formula": "IFS(IN([helper], \"0407M_BD\", \"0407M_SC\"), \"BD\", [helper] = \"0614M_LSF\", \"LSF\", [helper] = \"0614M_BU3\", \"BU3\", [helper] = \"0318\", \"BM6\", TRUE, \"\")",
+        "type": "text"
+      },
+      {
+        "id": "grade",
+        "label": "Grade",
+        "formula": "IFERROR(VALUE(LEFT(FIRST(in.SalarySetting.grade), 1)), \"Error\")",
+        "type": "text",
+        "show": false
+      }
+    ]
+  },
+  "costItems": [
+    {
+      "helper": "RUN",
+      "costCode": "RUN",
+      "nameVi": "Khoản chọn khi chạy",
+      "nameEn": "",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "gross",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true,
+      "helperColumn": "helper",
+      "costCenterColumn": "cc_override"
+    },
+    {
+      "helper": "0301",
+      "costCode": "0301",
+      "nameVi": "Lương Theo Sản Lượng Sản Xuất",
+      "nameEn": "Production Volume Based Salary",
+      "periodType": "M",
+      "budget": "HR0201",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0319",
+      "costCode": "0319",
+      "nameVi": "Lương Theo Doanh Số Nhóm Hàng",
+      "nameEn": "Sales Revenue Based Salary",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0303",
+      "costCode": "0303",
+      "nameVi": "Lương Thời Gian",
+      "nameEn": "Paid - Leave Salary",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0304",
+      "costCode": "0304",
+      "nameVi": "Lương Vị Trí Công Việc",
+      "nameEn": "Job Position Based Salary",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0305",
+      "costCode": "0305",
+      "nameVi": "Lương Hỗ Trợ, Ngừng Việc",
+      "nameEn": "Salary For Work Stoppage",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0306",
+      "costCode": "0306",
+      "nameVi": "Lương Học, Phong Trào",
+      "nameEn": "Training / Activity Salary",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0307",
+      "costCode": "0307",
+      "nameVi": "Lương Bổ Sung",
+      "nameEn": "People Engagement",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0308",
+      "costCode": "0308",
+      "nameVi": "Thưởng Doanh Số",
+      "nameEn": "Hospital Cost",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0309",
+      "costCode": "0309",
+      "nameVi": "Lương Thêm Giờ",
+      "nameEn": "Overtime Salary",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0321",
+      "costCode": "0321",
+      "nameVi": "Phụ Cấp Ca Đêm",
+      "nameEn": "Nigh Shift Allowance",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0310Y_HB",
+      "costCode": "0310",
+      "nameVi": "Thưởng Định Kỳ",
+      "nameEn": "Holiday Bonus",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0310Y_AB",
+      "costCode": "0310",
+      "nameVi": "Thưởng Đạt Doanh Thu - Lợi Nhuận",
+      "nameEn": "Bonus For Exceeding The Revenue And Profit Target",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0311M",
+      "costCode": "0311",
+      "nameVi": "Thưởng KPI Tháng",
+      "nameEn": "Monthly KPI Bonus",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0311Q",
+      "costCode": "0311",
+      "nameVi": "Thưởng KPI Quý",
+      "nameEn": "Quarterly KPI Bonus",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0311H",
+      "costCode": "0311",
+      "nameVi": "Thưởng KPI 6 tháng",
+      "nameEn": "Half Yearly KPI Bonus",
+      "periodType": "H",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0311Y",
+      "costCode": "0311",
+      "nameVi": "Thưởng KPI Năm",
+      "nameEn": "Yearly KPI Bonus",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0316",
+      "costCode": "0316",
+      "nameVi": "Bù Bảo Hiểm",
+      "nameEn": "Support Insurance",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317M_TB",
+      "costCode": "0317",
+      "nameVi": "Lương Thầu",
+      "nameEn": "Tender Incentive",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317M_ST",
+      "costCode": "0317",
+      "nameVi": "Thưởng Đạt Khoán Tháng",
+      "nameEn": "Monthly Sales Target Incentive",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317Q_ST",
+      "costCode": "0317",
+      "nameVi": "Thưởng Đạt Khoán Quý",
+      "nameEn": "Quarterly Sales Target Incentive",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317Y_ST",
+      "costCode": "0317",
+      "nameVi": "Thưởng Đạt Khoán Năm",
+      "nameEn": "Yearly Sales Target Incentive",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317Q_GS",
+      "costCode": "0317",
+      "nameVi": "Thưởng Doanh Số Nhóm Hàng Quý",
+      "nameEn": "Quarterly Group Sales Target Incentive",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317M_SI",
+      "costCode": "0317",
+      "nameVi": "Thưởng Khích Lệ Bán Hàng Tháng",
+      "nameEn": "Monthly Sales Incentive",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317Q_SI",
+      "costCode": "0317",
+      "nameVi": "Thưởng Khích Lệ Bán Hàng Quý",
+      "nameEn": "Quarterly Sales Incentive",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317H_SI",
+      "costCode": "0317",
+      "nameVi": "Thưởng Khích Lệ Bán Hàng 6 Tháng",
+      "nameEn": "Half Yearly Sales Incentive",
+      "periodType": "H",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0317Y_SI",
+      "costCode": "0317",
+      "nameVi": "Thưởng Khích Lệ Bán Hàng Năm",
+      "nameEn": "Yearly Sales Incentive",
+      "periodType": "Y",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0323M",
+      "costCode": "0323",
+      "nameVi": "Thưởng Thu Tiền Tháng",
+      "nameEn": "Monthly Cash Collecting Incentive",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0323Q",
+      "costCode": "0323",
+      "nameVi": "Thưởng Thu Tiền Quý",
+      "nameEn": "Quarterly Cash Collecting Incentive",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0322Q",
+      "costCode": "0322",
+      "nameVi": "Thưởng Vượt Khoán Quý",
+      "nameEn": "Excess Sales Target Incentive",
+      "periodType": "Q",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0322H",
+      "costCode": "0322",
+      "nameVi": "Thưởng Vượt Khoán 6 Tháng",
+      "nameEn": "Excess Sales Target Incentive",
+      "periodType": "H",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0318",
+      "costCode": "0318",
+      "nameVi": "Thưởng Hiệu Quả",
+      "nameEn": "Project Effective Bonus",
+      "periodType": "M",
+      "budget": "HR0205",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0401",
+      "costCode": "0401",
+      "nameVi": "Phụ Cấp Tiền Ăn",
+      "nameEn": "Meal Allowance",
+      "periodType": "M",
+      "budget": "AT",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0404",
+      "costCode": "0404",
+      "nameVi": "Phụ Cấp Xa Nhà",
+      "nameEn": "Hardship Allowance",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0406",
+      "costCode": "0406",
+      "nameVi": "Phụ Cấp Hao Mòn Xe",
+      "nameEn": "Vehicle Amortization Allowance",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0417",
+      "costCode": "0417",
+      "nameVi": "Phụ Cấp Điện Thoại",
+      "nameEn": "Phone Allowance",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "1401",
+      "costCode": "1401",
+      "nameVi": "Hỗ Trợ Tiền Vượt Kilomet",
+      "nameEn": "Excess Kilomet Allowance",
+      "periodType": "M",
+      "budget": "DC0400",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407Q_HS",
+      "costCode": "0407",
+      "nameVi": "Hỗ Trợ An Toàn Vệ Sinh Viên",
+      "nameEn": "Occupational Health & Safety Representatives Allowance",
+      "periodType": "Q",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407Q_FP",
+      "costCode": "0407",
+      "nameVi": "Hỗ Trợ Phòng Cháy Chữa Cháy",
+      "nameEn": "Fire Prevention & Fire Fighting Allowance",
+      "periodType": "Q",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407Q_PQ",
+      "costCode": "0407",
+      "nameVi": "Phụ Cấp Chuyên Môn Dược",
+      "nameEn": "Pharmacy Qualification Allowance",
+      "periodType": "Q",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "2002Q",
+      "costCode": "2002",
+      "nameVi": "Phụ Cấp Chuyên Môn Dược",
+      "nameEn": "Pharmacy Qualification Allowance",
+      "periodType": "Q",
+      "budget": "Opex",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "2005Q",
+      "costCode": "2005",
+      "nameVi": "Phụ Cấp Chuyên Môn GTVT",
+      "nameEn": "Transportation Qualification Allowance",
+      "periodType": "Q",
+      "budget": "WH40100",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407M_BD",
+      "costCode": "0407",
+      "nameVi": "Thù Lao Hội Đồng Quản Trị",
+      "nameEn": "BOD Remuneration",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407M_SC",
+      "costCode": "0407",
+      "nameVi": "Thù Lao Hội Đồng Quản Trị",
+      "nameEn": "BOD Remuneration",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0807Q",
+      "costCode": "0807",
+      "nameVi": "Hỗ trợ Hội Đồng Khoa Học Công Nghệ",
+      "nameEn": "Science & Technology Council Allowance",
+      "periodType": "Q",
+      "budget": "BM40200",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0413Y_TB",
+      "costCode": "0413",
+      "nameVi": "Huấn Luyện Nội Bộ",
+      "nameEn": "Team Building",
+      "periodType": "Y",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0413Y_OS",
+      "costCode": "0413",
+      "nameVi": "Nghiên Cứu Thị Trường",
+      "nameEn": "Oversea Travel",
+      "periodType": "Y",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0806",
+      "costCode": "0806",
+      "nameVi": "Khen Thưởng Sáng Kiến",
+      "nameEn": "Initiative Bonus",
+      "periodType": "M",
+      "budget": "BM40200",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0418",
+      "costCode": "0418",
+      "nameVi": "Tiền, Quà Sinh Nhật Nhân Viên",
+      "nameEn": "Birthday Money, Gift For Employee",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0419",
+      "costCode": "0419",
+      "nameVi": "Tiền, Quà Tết Nhân Viên",
+      "nameEn": "Tet Money, Gift For Employee",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0416",
+      "costCode": "0416",
+      "nameVi": "Hỗ Trợ Đi Lại",
+      "nameEn": "Transportation Allowance",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0412",
+      "costCode": "0412",
+      "nameVi": "Tiền Bảo Hiểm Sức Khoẻ",
+      "nameEn": "Premium Healthcare Insurance",
+      "periodType": "M",
+      "budget": "AT",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0320",
+      "costCode": "0320",
+      "nameVi": "Thưởng Tạo Động Lực Bán Hàng",
+      "nameEn": "Motivation Bonus",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0614M_LSF",
+      "costCode": "0614",
+      "nameVi": "Thưởng Doanh Số Lusefi",
+      "nameEn": "Sales Bonus for Lusefi",
+      "periodType": "M",
+      "budget": "LSF0100",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "2903",
+      "costCode": "2903",
+      "nameVi": "Trợ Cấp Mất Việc Làm",
+      "nameEn": "Severance Allowance",
+      "periodType": "M",
+      "budget": "HR1200",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "WF",
+      "costCode": "WF",
+      "nameVi": "Chi Phí từ Quỹ Phúc Lợi",
+      "nameEn": "Welfare Fund",
+      "periodType": "M",
+      "budget": "WF",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0304M_AS",
+      "costCode": "0304",
+      "nameVi": "Phụ Cấp Theo Tờ Trình (HNI)",
+      "nameEn": "Additional Salary (HNI Project)",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0416M_SM",
+      "costCode": "0416",
+      "nameVi": "Hỗ Trợ Đi Lại (SL&MK Thay đổi nơi làm việc)",
+      "nameEn": "Transportation Allowance (SL&MK Relocation)",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407M_HA",
+      "costCode": "0407",
+      "nameVi": "Phụ Cấp Nhà Ở (Theo thư mời nhận việc)",
+      "nameEn": "Housing Allowance (As Offer Letter)",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407M_W3",
+      "costCode": "0407",
+      "nameVi": "Phụ Cấp Nhà Ở (Kho 3 Thay đổi nơi làm việc)",
+      "nameEn": "Housing Allowance (WH3 Relocation)",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0407M_SM",
+      "costCode": "0407",
+      "nameVi": "Phụ Cấp Nhà Ở (SL&MK Thay đổi nơi làm việc)",
+      "nameEn": "Housing Allowance (SL&MK Relocation)",
+      "periodType": "M",
+      "budget": "HR1000",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0308M_TC",
+      "costCode": "0308",
+      "nameVi": "Thưởng Chốt Hợp Đồng Thầu",
+      "nameEn": "Tender Contract Bonus",
+      "periodType": "M",
+      "budget": "HR",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    },
+    {
+      "helper": "0614M_BU3",
+      "costCode": "0614",
+      "nameVi": "Thưởng Hỗ Trợ BU3",
+      "nameEn": "Support Bonus for BU3",
+      "periodType": "M",
+      "budget": "BU30200",
+      "amount": "",
+      "employeeAmount": null,
+      "accrue": true,
+      "pay": true
+    }
+  ],
+  "aggregation": {
+    "unitColumn": "unit",
+    "costCenterTable": "CostCenter",
+    "deptColumn": "Dept",
+    "costCenterColumn": "Cost Center",
+    "sectorColumn": "Sector",
+    "unitFilter": null,
+    "descriptionTemplate": "{name}_{period}_{dept}-{unit}"
+  },
+  "forms": {
+    "form02": {
+      "enabled": true,
+      "prefix": "",
+      "rowFilter": null,
+      "adjust": true,
+      "ledgerFeed": {
+        "sheet": "accrual",
+        "amountColumn": "accrual"
+      },
+      "columns": [
+        {
+          "id": "no",
+          "headerVi": "STT",
+          "headerEn": "No",
+          "formula": "row.no",
+          "type": "number",
+          "width": 4.7,
+          "total": false
+        },
+        {
+          "id": "sector",
+          "headerVi": "Khối",
+          "headerEn": "Sector",
+          "formula": "row.sector",
+          "type": "text",
+          "width": 5.7
+        },
+        {
+          "id": "dept",
+          "headerVi": "Mã đơn vị",
+          "headerEn": "Dept",
+          "formula": "row.dept",
+          "type": "text",
+          "width": 6
+        },
+        {
+          "id": "unit",
+          "headerVi": "Mã bộ phận",
+          "headerEn": "Unit",
+          "formula": "row.unit",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "budget",
+          "headerVi": "Ngân sách",
+          "headerEn": "Budget Code",
+          "formula": "row.budgetCode",
+          "type": "text",
+          "width": 8.5
+        },
+        {
+          "id": "cc",
+          "headerVi": "TTCP",
+          "headerEn": "Cost Center",
+          "formula": "row.costCenter",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "costCode",
+          "headerVi": "Mã chi phí",
+          "headerEn": "Cost Code",
+          "formula": "row.costCode",
+          "type": "text",
+          "width": 6.5
+        },
+        {
+          "id": "desc",
+          "headerVi": "Nội Dung",
+          "headerEn": "Description",
+          "formula": "SUBSTITUTE(\"Chi \" & PROPER(IF(run.name_vn <> \"\", run.name_vn, ITEM(run.cost, \"nameVi\"))) & \"_\" & row.period & \"_\" & row.dept & \"-\" & row.unit & IF(row.helper = \"0407M_SC\", \" (SCIC)\", IF(row.unit = \"HRD\", \" (TV HĐQT không điều hành)\", \"\")), \"Chi\", \"Trích\")",
+          "type": "text",
+          "width": 50
+        },
+        {
+          "id": "accrual",
+          "headerVi": "Số tiền trích kỳ này",
+          "headerEn": "Accrual amount this period",
+          "formula": "row.amount",
+          "type": "number",
+          "width": 14.3
+        },
+        {
+          "id": "adjusted",
+          "headerVi": "Số điều chỉnh kỳ trước",
+          "headerEn": "Adjusted amount last period",
+          "formula": "row.adjusted",
+          "type": "number",
+          "width": 14.3
+        },
+        {
+          "id": "actual",
+          "headerVi": "Số phải trích kỳ này",
+          "headerEn": "Actual accrual amount this period",
+          "formula": "[accrual] + [adjusted]",
+          "type": "number",
+          "width": 14.3
+        }
+      ],
+      "layout": {
+        "sheetName": "Form 02 - Print",
+        "companyName": "CÔNG TY CỔ PHẦN DƯỢC HẬU GIANG",
+        "titleVi": "{=LET(tv, UPPER(SWITCH(MID(run.cost, 5, 1), \"Y\", \"\", \"H\", LOOKUP(\"TimeLabels\", run.month, \"VN_H\", \"\"), \"Q\", LOOKUP(\"TimeLabels\", run.month, \"VN_Q\", \"\"), LOOKUP(\"TimeLabels\", run.month, \"VN_M\", \"\"))), TEXTJOIN(\" \", TRUE, \"BẢNG TỔNG HỢP TRÍCH\", UPPER(IF(run.name_vn <> \"\", run.name_vn, ITEM(run.cost, \"nameVi\"))), \"–\", tv & IF(tv = \"\", \"\", \".\") & run.year))}",
+        "titleEn": "{=TEXTJOIN(\" \", TRUE, \"ACCRUAL LIST OF\", UPPER(IF(run.name_en <> \"\", run.name_en, ITEM(run.cost, \"nameEn\"))), \"–\", UPPER(SWITCH(MID(run.cost, 5, 1), \"Y\", \"\", \"H\", LOOKUP(\"TimeLabels\", run.month, \"EN_H\", \"\"), \"Q\", LOOKUP(\"TimeLabels\", run.month, \"EN_Q\", \"\"), LOOKUP(\"TimeLabels\", run.month, \"EN_M\", \"\"))), run.year)}",
+        "placeDate": "TP. Cần Thơ, ngày {=DAY(TODAY())}  tháng {=MONTH(TODAY())} năm {=YEAR(TODAY())}",
+        "signatures": [
+          {
+            "title": "Trưởng Phòng Nhân sự",
+            "titleEn": "Human Resource Manager",
+            "nameParam": "hr_manager"
+          },
+          {
+            "title": "Người đề nghị",
+            "titleEn": "Reporter",
+            "nameParam": "reporter"
+          }
+        ],
+        "footer": [
+          {
+            "kind": "text",
+            "align": "right",
+            "lines": [
+              "Ý kiến soát xét của phòng kế toán (*)/Phòng Tài chính (*)",
+              "Review of Accounting Department (*)/ Finance Department (*)"
+            ]
+          },
+          {
+            "kind": "text",
+            "lines": [
+              "o  Đồng ý đề nghị trích trước khoản mục STT……",
+              "    Agree with the accrual request item No ……",
+              "o  Không đồng ý đề nghị trích trước khoản mục STT…… Lý do ……",
+              "    Disagree with the accrual request of items No. …… Reason:……"
+            ]
+          },
+          {
+            "kind": "signatures",
+            "roles": [
+              {
+                "title": "PHÒNG KẾ TOÁN (*)/ PHÒNG TÀI CHÍNH (*)",
+                "titleEn": "Accounting Department (*)/ Finance Department (*)"
+              },
+              {
+                "title": "PHÊ DUYỆT CỦA GIÁM ĐỐC TÀI CHÍNH (**)",
+                "titleEn": "Approval Of Finance Director (**)"
+              }
+            ]
+          }
+        ],
+        "orientation": "portrait",
+        "totalPosition": "bottom",
+        "totalLabel": "Total"
+      }
+    },
+    "form03": {
+      "enabled": true,
+      "prefix": "",
+      "rowFilter": null,
+      "adjust": false,
+      "ledgerFeed": {
+        "sheet": "actual",
+        "amountColumn": "gross"
+      },
+      "columns": [
+        {
+          "id": "no",
+          "headerVi": "STT",
+          "headerEn": "No",
+          "formula": "row.no",
+          "type": "number",
+          "width": 4.7,
+          "total": false
+        },
+        {
+          "id": "sector",
+          "headerVi": "Khối",
+          "headerEn": "Sector",
+          "formula": "row.sector",
+          "type": "text",
+          "width": 5.7
+        },
+        {
+          "id": "dept",
+          "headerVi": "Mã đơn vị",
+          "headerEn": "Dept",
+          "formula": "row.dept",
+          "type": "text",
+          "width": 6
+        },
+        {
+          "id": "unit",
+          "headerVi": "Mã bộ phận",
+          "headerEn": "Unit",
+          "formula": "row.unit",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "budget",
+          "headerVi": "Ngân sách",
+          "headerEn": "Budget Code",
+          "formula": "row.budgetCode",
+          "type": "text",
+          "width": 8.5
+        },
+        {
+          "id": "cc",
+          "headerVi": "TTCP",
+          "headerEn": "Cost Center",
+          "formula": "row.costCenter",
+          "type": "text",
+          "width": 7
+        },
+        {
+          "id": "costCode",
+          "headerVi": "Mã chi phí",
+          "headerEn": "Cost Code",
+          "formula": "row.costCode",
+          "type": "text",
+          "width": 6.5
+        },
+        {
+          "id": "desc",
+          "headerVi": "Nội Dung",
+          "headerEn": "Description",
+          "formula": "\"Chi \" & PROPER(IF(run.name_vn <> \"\", run.name_vn, ITEM(run.cost, \"nameVi\"))) & \"_\" & row.period & \"_\" & row.dept & \"-\" & row.unit & IF(row.helper = \"0407M_SC\", \" (SCIC)\", IF(row.unit = \"HRD\", \" (TV HĐQT không điều hành)\", \"\"))",
+          "type": "text",
+          "width": 50
+        },
+        {
+          "id": "gross",
+          "headerVi": "Tổng lãnh",
+          "headerEn": "Total Gross Amount Received",
+          "formula": "row.amount",
+          "type": "number",
+          "width": 14.4
+        },
+        {
+          "id": "pit",
+          "headerVi": "Thuế TNCN",
+          "headerEn": "PIT",
+          "formula": "ROWSUM(emp.pit)",
+          "type": "number",
+          "width": 12
+        },
+        {
+          "id": "other",
+          "headerVi": "Trừ khác",
+          "headerEn": "Other Deduction",
+          "formula": "ROWSUM(emp.other)",
+          "type": "number",
+          "width": 12
+        },
+        {
+          "id": "net",
+          "headerVi": "Thực lãnh",
+          "headerEn": "Total Net Amount Received",
+          "formula": "ROWSUM(emp.net)",
+          "type": "number",
+          "width": 14.4
+        }
+      ],
+      "layout": {
+        "sheetName": "Form 03 - Print",
+        "companyName": "CÔNG TY CỔ PHẦN DƯỢC HẬU GIANG",
+        "titleVi": "{=LET(tv, UPPER(SWITCH(MID(run.cost, 5, 1), \"Y\", \"\", \"H\", LOOKUP(\"TimeLabels\", run.month, \"VN_H\", \"\"), \"Q\", LOOKUP(\"TimeLabels\", run.month, \"VN_Q\", \"\"), LOOKUP(\"TimeLabels\", run.month, \"VN_M\", \"\"))), TEXTJOIN(\" \", TRUE, \"BẢNG TỔNG HỢP CHI\", UPPER(IF(run.name_vn <> \"\", run.name_vn, ITEM(run.cost, \"nameVi\"))), \"–\", tv & IF(tv = \"\", \"\", \".\") & run.year))}",
+        "titleEn": "{=TEXTJOIN(\" \", TRUE, \"PAYMENT LIST OF\", UPPER(IF(run.name_en <> \"\", run.name_en, ITEM(run.cost, \"nameEn\"))), \"–\", UPPER(SWITCH(MID(run.cost, 5, 1), \"Y\", \"\", \"H\", LOOKUP(\"TimeLabels\", run.month, \"EN_H\", \"\"), \"Q\", LOOKUP(\"TimeLabels\", run.month, \"EN_Q\", \"\"), LOOKUP(\"TimeLabels\", run.month, \"EN_M\", \"\"))), run.year)}",
+        "placeDate": "TP. Cần Thơ, ngày {=DAY(TODAY())}  tháng {=MONTH(TODAY())} năm {=YEAR(TODAY())}",
+        "signatures": [
+          {
+            "title": "Người đề nghị",
+            "titleEn": "Reporter",
+            "nameParam": "reporter"
+          },
+          {
+            "title": "Trưởng Phòng Nhân sự",
+            "titleEn": "Human Resource Manager",
+            "nameParam": "hr_manager"
+          },
+          {
+            "title": "Tổng giám đốc",
+            "titleEn": "General Director",
+            "nameParam": "general_director"
+          }
+        ],
+        "orientation": "portrait",
+        "totalPosition": "bottom",
+        "totalLabel": "Total"
+      }
+    }
+  },
+  "checks": [
+    {
+      "id": "dup_emp",
+      "level": "error",
+      "scope": "employee",
+      "formula": "COUNTIFS(in.SalaryTable.emp_id, [emp_id]) = 1",
+      "message": "Mã NV xuất hiện nhiều lần trong danh sách (Salary Table!A3)"
+    },
+    {
+      "id": "blank_unit",
+      "level": "error",
+      "scope": "employee",
+      "formula": "NOT(ISBLANK([unit]))",
+      "message": "Nhân viên không có Mã BP"
+    },
+    {
+      "id": "kpi_group",
+      "level": "error",
+      "scope": "employee",
+      "formula": "LET(g, LOOKUP(\"CostCenter\", [unit], \"OI Nhóm\", \"\"), ok, OR(g = \"M\", AND(g = \"MG\", IFERROR(VALUE([grade]) < 3, FALSE))), IFS([helper] = \"0311M\", ok, [helper] = \"0311H\", NOT(ok), TRUE, TRUE))",
+      "message": "Nhân viên không thuộc nhóm được hưởng khoản KPI đã chọn (Form 01 Check)"
+    },
+    {
+      "id": "form02_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f02.accrual) = SUM(emp.gross)",
+      "message": "Tổng Form 02 ≠ tổng Tổng lãnh (Form 02!J1)"
+    },
+    {
+      "id": "gross_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f03.gross) = SUM(emp.gross)",
+      "message": "Tổng lãnh Form 03 ≠ danh sách (Form 03!J1)"
+    },
+    {
+      "id": "pit_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f03.pit) = SUM(emp.pit)",
+      "message": "Thuế TNCN Form 03 ≠ danh sách (Form 03!K1)"
+    },
+    {
+      "id": "other_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f03.other) = SUM(emp.other)",
+      "message": "Trừ khác Form 03 ≠ danh sách (Form 03!L1)"
+    },
+    {
+      "id": "net_total",
+      "level": "error",
+      "scope": "total",
+      "formula": "SUM(f03.net) = SUM(in.SalaryTable.net)",
+      "message": "Thực lãnh Form 03 ≠ danh sách (Form 03!M1)"
+    }
+  ],
+  "extraSheets": []
+}

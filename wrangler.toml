@@ -1,0 +1,10 @@
+name = "cb-forms"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cb-forms"
+# Replace with the id printed by `wrangler d1 create cb-forms`
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

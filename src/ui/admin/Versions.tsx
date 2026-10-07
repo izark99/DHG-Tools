@@ -1,0 +1,185 @@
+// Version timeline (effective periods), JSON diff, re-publish an older version as a new version,
+// cancel / restore a version's effect. Versions are never deleted.
+import { useState } from 'react';
+import { api, errMsg, type VersionInfo } from '../../api';
+import type { FlowConfig } from '../../engine/types';
+import { Alert } from '../common';
+import { EffectiveDialog, range, VersionTable } from './Effective';
+
+type DiffLine = { op: ' ' | '+' | '-'; text: string };
+
+export function lineDiff(a: string[], b: string[]): DiffLine[] {
+  const n = a.length;
+  const m = b.length;
+  if (n * m > 25_000_000) return [...a.map((t) => ({ op: '-' as const, text: t })), ...b.map((t) => ({ op: '+' as const, text: t }))];
+  const w = m + 1;
+  const L = new Uint32Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--) L[i * w + j] = a[i] === b[j] ? L[(i + 1) * w + j + 1] + 1 : Math.max(L[(i + 1) * w + j], L[i * w + j + 1]);
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ op: ' ', text: a[i] });
+      i++;
+      j++;
+    } else if (L[(i + 1) * w + j] >= L[i * w + j + 1]) out.push({ op: '-', text: a[i++] });
+    else out.push({ op: '+', text: b[j++] });
+  }
+  while (i < n) out.push({ op: '-', text: a[i++] });
+  while (j < m) out.push({ op: '+', text: b[j++] });
+  return out;
+}
+
+function DiffView({ left, right }: { left: string; right: string }) {
+  const d = lineDiff(left.split('\n'), right.split('\n'));
+  const changed = d.filter((x) => x.op !== ' ').length;
+  // show changed lines with 3 lines of context
+  const keep = new Set<number>();
+  d.forEach((x, i) => {
+    if (x.op !== ' ') for (let k = i - 3; k <= i + 3; k++) keep.add(k);
+  });
+  return (
+    <div>
+      <p className="muted small">{changed ? `${changed} dòng khác nhau` : 'Giống hệt nhau'}</p>
+      <pre className="diff">
+        {d.map((x, i) =>
+          keep.has(i) ? (
+            <div key={i} className={x.op === '+' ? 'add' : x.op === '-' ? 'del' : undefined}>
+              {x.op} {x.text}
+            </div>
+          ) : keep.has(i - 1) ? (
+            <div key={i} className="muted">
+              …
+            </div>
+          ) : null,
+        )}
+      </pre>
+    </div>
+  );
+}
+
+export function Versions({
+  flowId,
+  versions,
+  current,
+  onRepublished,
+}: {
+  flowId: string;
+  versions: VersionInfo[];
+  current: FlowConfig;
+  onRepublished: () => void;
+}) {
+  const [view, setView] = useState<{ version: number; config: FlowConfig } | null>(null);
+  const [against, setAgainst] = useState<'current' | number>('current');
+  const [other, setOther] = useState<FlowConfig | null>(null);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [republish, setRepublish] = useState<VersionInfo | null>(null);
+
+  const load = async (v: number) => {
+    setMsg(null);
+    try {
+      const r = await api.version(flowId, v);
+      setView({ version: v, config: r.config });
+    } catch (e) {
+      setMsg({ kind: 'error', text: errMsg(e) });
+    }
+  };
+  const action = async (v: VersionInfo, a: 'cancel' | 'restore') => {
+    const text =
+      a === 'cancel'
+        ? `Huỷ hiệu lực v${v.version}? Phiên bản vẫn được lưu trong lịch sử; các kỳ ${range(v)} sẽ dùng phiên bản liền trước.`
+        : `Khôi phục hiệu lực v${v.version} (từ kỳ ${v.effective_from})?`;
+    if (!confirm(text)) return;
+    try {
+      await api.flowVersionAction(flowId, v.version, a);
+      setMsg({ kind: 'ok', text: a === 'cancel' ? `Đã huỷ hiệu lực v${v.version}.` : `Đã khôi phục hiệu lực v${v.version}.` });
+      onRepublished();
+    } catch (e) {
+      setMsg({ kind: 'error', text: errMsg(e) });
+    }
+  };
+
+  return (
+    <div>
+      {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+      <p className="muted">
+        Mỗi lần publish là một phiên bản mới có hiệu lực từ một kỳ lương. Khi chạy, ứng dụng dùng phiên bản có hiệu lực của kỳ được chọn. Phiên bản cũ không bao giờ bị
+        xoá — có thể huỷ hiệu lực hoặc publish lại thành phiên bản mới.
+      </p>
+      <VersionTable
+        versions={versions}
+        selected={view?.version}
+        actions={(v) => (
+          <>
+            <button type="button" className="sm" onClick={() => load(v.version)}>
+              Xem / so sánh
+            </button>
+            <button type="button" className="sm" onClick={() => setRepublish(v)}>
+              Publish lại
+            </button>
+            {v.state === 'cancelled' ? (
+              <button type="button" className="sm" onClick={() => action(v, 'restore')}>
+                Khôi phục
+              </button>
+            ) : (
+              <button type="button" className="sm danger" onClick={() => action(v, 'cancel')}>
+                Huỷ hiệu lực
+              </button>
+            )}
+          </>
+        )}
+      />
+      {republish && (
+        <EffectiveDialog
+          title={`Publish lại v${republish.version} thành phiên bản mới`}
+          what={`flow ${flowId}`}
+          versions={versions}
+          saveLabel="Publish"
+          onClose={() => setRepublish(null)}
+          onSave={async (effectiveFrom, note) => {
+            try {
+              const r = await api.publish(flowId, { fromVersion: republish.version, effectiveFrom, note: note || `Publish lại từ v${republish.version}` });
+              setRepublish(null);
+              setMsg({ kind: 'ok', text: `Đã publish lại v${republish.version} thành v${r.version}.` });
+              onRepublished();
+            } catch (e) {
+              setMsg({ kind: 'error', text: errMsg(e) });
+            }
+          }}
+        />
+      )}
+      {view && (
+        <div className="card diff-card">
+          <div className="row gap">
+            <strong>v{view.version}</strong> so với
+            <select
+              value={String(against)}
+              onChange={async (e) => {
+                const val = e.target.value;
+                if (val === 'current') {
+                  setAgainst('current');
+                  setOther(null);
+                } else {
+                  setAgainst(Number(val));
+                  setOther((await api.version(flowId, Number(val))).config);
+                }
+              }}
+            >
+              <option value="current">cấu hình đang sửa</option>
+              {versions
+                .filter((v) => v.version !== view.version)
+                .map((v) => (
+                  <option key={v.version} value={v.version}>
+                    v{v.version}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <DiffView left={JSON.stringify(view.config, null, 2)} right={JSON.stringify(against === 'current' ? current : (other ?? {}), null, 2)} />
+        </div>
+      )}
+    </div>
+  );
+}

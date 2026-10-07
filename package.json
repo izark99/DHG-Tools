@@ -1,0 +1,39 @@
+{
+  "name": "dhg-cb-forms",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.functions.json && tsc -p tsconfig.node.json && tsc -p tsconfig.seed.json",
+    "test": "vitest run",
+    "pages:dev": "wrangler pages dev dist --port 8788",
+    "db:migrate:local": "wrangler d1 migrations apply cb-forms --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cb-forms --remote",
+    "test:e2e": "E2E=1 vitest run",
+    "test:api": "bash tests/api-smoke.sh",
+    "seed": "node seed/build.ts",
+    "seed:synthetic": "node seed/synthetic-export.ts",
+    "seed:masters": "python3 -I scripts/seed/extract_masters.py reference/wb reference/out/masters.json"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@tabler/icons-react": "^3.49.0",
+    "exceljs": "^4.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright-core": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}
