@@ -5,6 +5,6 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "cb-forms"
-# Replace with the id printed by `wrangler d1 create cb-forms`
-database_id = "00000000-0000-0000-0000-000000000000"
+# Production database (Cloudflare account of DHG C&B). Not a secret: reaching it needs account access.
+database_id = "505c40b6-76a1-4138-9ca2-ac8f3b7bbfb0"
 migrations_dir = "migrations"
