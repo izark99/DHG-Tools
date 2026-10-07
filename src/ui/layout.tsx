@@ -5,6 +5,7 @@ import { nextTheme, setThemePref, THEME_ICON, THEME_LABEL, useThemePref } from '
 import {
   IconAlertTriangle,
   IconArchive,
+  IconBook2,
   IconCalculator,
   IconCheck,
   IconChevronRight,
@@ -42,6 +43,7 @@ const ICONS: Record<string, TablerIcon> = {
   users: IconUsers,
   user: IconUser,
   archive: IconArchive,
+  book: IconBook2,
   logout: IconLogout,
   key: IconKey,
   shield: IconShieldLock,

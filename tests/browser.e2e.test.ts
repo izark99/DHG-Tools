@@ -313,7 +313,7 @@ describe('browser end-to-end', () => {
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/run-result.png`, fullPage: true });
     // sidebar items stay put across pages
     let nref = '';
-    for (const h of ['#/', '#/admin/flows', '#/admin/masters', '#/admin/users', '#/admin/backup', '#/account']) {
+    for (const h of ['#/', '#/admin/flows', '#/admin/masters', '#/admin/users', '#/admin/backup', '#/admin/help', '#/account']) {
       await page.goto(`${BASE}/${h}`);
       await page.locator('.page-header').first().waitFor();
       const now = JSON.stringify([await boxes('.nav-item'), await boxes('.brand'), await boxes('.sidebar-foot'), (await boxes('.page-header')).map((b) => b.split(',').slice(0, 3).join(','))]);
