@@ -112,6 +112,16 @@ function open(e: MouseEvent, key: string, fallback: string, multiline: boolean, 
   emit();
 }
 
+/**
+ * For a link or button whose label is an editable text (sidebar items): in edit mode a click anywhere
+ * on it edits the label instead of following the link (Alt+click still follows it).
+ */
+export function editOnClick(key: string, fallback: string) {
+  return (e: MouseEvent) => {
+    if (canEdit && editMode) open(e, key, fallback, false);
+  };
+}
+
 /** Editable text. `children` is the built-in default; `{name}` placeholders are filled from `vars`. */
 export function T({ k, children, vars, multiline = false }: { k: string; children: string; vars?: Vars; multiline?: boolean }) {
   const { texts: t, editMode: on, editing: cur } = useStore();

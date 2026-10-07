@@ -428,6 +428,14 @@ describe('browser end-to-end', () => {
     // edit mode only adds an outline: the title does not move
     expect(await h1.boundingBox()).toEqual(before);
 
+    // a sidebar item edits its label wherever it is clicked (the active item looks like one big button)
+    const item = page.locator('.nav-item').first();
+    const box = (await item.boundingBox())!;
+    await page.mouse.click(box.x + box.width - 6, box.y + box.height / 2);
+    await page.locator('.text-editor-head code').getByText('nav.run').waitFor();
+    await page.keyboard.press('Escape');
+    expect(await page.locator('.text-editor').count()).toBe(0);
+
     await page.locator('[data-text-key="home.title"]').click();
     await page.getByLabel('Nội dung').fill(title);
     await page.getByLabel('Nội dung').press('Enter');
@@ -455,7 +463,8 @@ describe('browser end-to-end', () => {
     // reset from Admin › Giao diện
     await page.goto(`${BASE}/#/admin/texts`);
     for (const k of ['home.title', 'home.guide']) await page.locator('tr', { hasText: k }).getByRole('button', { name: 'Khôi phục mặc định' }).click();
-    await page.getByText('Chưa sửa văn bản nào').waitFor();
+    // only the texts this test changed are checked (other overrides may exist in a shared database)
+    await expect.poll(() => page.locator('table.grid tr', { hasText: /home\.(title|guide)/ }).count()).toBe(0);
     await page.goto(`${BASE}/#/`);
     await h1.getByText('Chọn flow để chạy').waitFor();
     expect(await page.locator('.guide').count()).toBe(0);
