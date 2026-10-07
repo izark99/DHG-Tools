@@ -11,7 +11,7 @@ import { periodLabel } from '../engine/effective';
 import { readLedger, writeLedger, type LedgerRead } from '../excel/ledgerFile';
 import { readSheets } from '../excel/read';
 import { ledgerFileName, writeForms } from '../excel/writeForms';
-import { Alert, download, useAsync, XLSX_TYPE } from './common';
+import { Alert, download, FilePick, useAsync, XLSX_TYPE } from './common';
 import { Preview } from './Preview';
 import { Card, Icon, PageHeader } from './layout';
 import { Guide, T } from './texts';
@@ -712,48 +712,6 @@ function WizardBody({
 
       {result && <Preview config={config} result={result} />}
     </>
-  );
-}
-
-function FilePick({
-  label,
-  required,
-  accept,
-  fileName,
-  status,
-  bad,
-  onFile,
-  extra,
-}: {
-  label: string;
-  required?: boolean;
-  accept: string;
-  fileName?: string;
-  status?: string;
-  bad?: boolean;
-  onFile: (f: File | undefined) => void;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <div className={`file-pick${status ? ' done' : ''}${bad ? ' bad' : ''}`}>
-      <div className="file-icon">
-        <Icon name={status ? 'check' : 'file'} />
-      </div>
-      <div className="file-info">
-        <div className="file-label">
-          {label}
-          {required && <em className="req">*</em>}
-        </div>
-        <div className="file-status">{status ?? (fileName ? fileName : 'Chưa chọn file (.xlsx)')}</div>
-      </div>
-      <div className="file-actions">
-        {extra}
-        <label className="button">
-          <Icon name="upload" size={16} /> {fileName ? 'Đổi file' : 'Chọn file'}
-          <input type="file" accept={accept} hidden onChange={(e) => (onFile(e.target.files?.[0]), (e.target.value = ''))} />
-        </label>
-      </div>
-    </div>
   );
 }
 

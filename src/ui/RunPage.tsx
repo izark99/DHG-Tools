@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, errMsg, type User } from '../api';
 import type { FlowConfig } from '../engine/types';
-import { Alert, readFileText, useAsync } from './common';
+import { Alert, FilePick, readFileText, useAsync } from './common';
 import { Card, PageHeader } from './layout';
 import { RunWizard } from './RunWizard';
 import { Guide, T } from './texts';
@@ -22,6 +22,7 @@ export function RunFromFile({ user }: { user: User }) {
   const [config, setConfig] = useState<FlowConfig | null>(null);
   const [loadNo, setLoadNo] = useState(0);
   const [err, setErr] = useState('');
+  const [fileName, setFileName] = useState('');
   return (
     <>
       {!config && (
@@ -36,13 +37,17 @@ export function RunFromFile({ user }: { user: User }) {
         </>
       )}
       <Card title={<T k="runFile.card">File cấu hình flow (.json)</T>}>
-      <input
-        type="file"
+      <FilePick
+        label="Cấu hình flow"
         accept=".json,application/json"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
+        emptyText="Chưa chọn file (.json) — file xuất từ trình sửa flow (Xuất JSON)"
+        fileName={fileName || undefined}
+        status={config ? `${fileName} · ${config.id} — ${config.name}` : undefined}
+        bad={!!err}
+        onFile={async (file) => {
           setErr('');
           setConfig(null);
+          setFileName(file?.name ?? '');
           if (!file) return;
           try {
             const j = JSON.parse(await readFileText(file));

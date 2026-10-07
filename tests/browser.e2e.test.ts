@@ -251,6 +251,21 @@ describe('browser end-to-end', () => {
     expect(await page.getByRole('button', { name: 'Tính' }).isDisabled()).toBe(true);
   });
 
+  it('the sidebar highlights exactly one item', async () => {
+    for (const [h, label] of [
+      ['#/', 'Chạy'],
+      [`#/run/${FLOW}`, 'Chạy'],
+      ['#/run-file', 'JSON'],
+      ['#/admin/flows', 'Flows'],
+    ] as const) {
+      await page.goto(`${BASE}/${h}`);
+      await page.locator('.page-header').first().waitFor();
+      const active = await page.locator('.nav-item.active').allTextContents();
+      expect(active.length, h).toBe(1);
+      expect(active[0], h).toContain(label);
+    }
+  });
+
   it('layout does not shift between tabs and pages', async () => {
     const boxes = (sel: string) =>
       page.$$eval(sel, (els) => els.map((e) => {
