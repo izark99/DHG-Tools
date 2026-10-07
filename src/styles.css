@@ -439,6 +439,12 @@ button.link:hover:not(:disabled) {
   gap: 12px 16px;
   align-items: end;
 }
+/* a button (or a row of buttons) right after a grid of fields gets breathing room */
+.form-grid + button,
+.form-grid + .button,
+.form-grid + .row {
+  margin-top: 16px;
+}
 .form-grid .wide,
 .wide {
   grid-column: 1 / -1;
@@ -895,7 +901,7 @@ body > .center {
   height: 28px;
 }
 .empty {
-  margin-top: 16px;
+  margin-top: 0;
   padding: 48px 20px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
@@ -903,6 +909,10 @@ body > .center {
   justify-items: center;
   gap: 4px;
   color: var(--text-2);
+}
+/* space only when something comes before it (side-by-side layouts stay top-aligned) */
+* + .empty {
+  margin-top: 16px;
 }
 .empty > .icon {
   color: var(--light);

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, errMsg } from '../../api';
 import type { FlowConfig } from '../../engine/types';
-import { Alert, useAsync } from '../common';
+import { Alert, FilePick, useAsync } from '../common';
 import { Card, Icon, PageHeader } from '../layout';
 import { blankConfig } from './blank';
 import { Guide, T } from '../texts';
@@ -11,6 +11,7 @@ export function FlowsPage() {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [fromFile, setFromFile] = useState<FlowConfig | null>(null);
+  const [fromName, setFromName] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const create = async () => {
@@ -99,14 +100,16 @@ export function FlowsPage() {
             Tên
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label className="field">
-            Bắt đầu từ file cấu hình JSON (tuỳ chọn)
-            <input
-              type="file"
-              accept=".json"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
+          <div className="wide">
+            <FilePick
+              label="Bắt đầu từ file cấu hình JSON (tuỳ chọn)"
+              accept=".json,application/json"
+              emptyText="Chưa chọn file (.json) — bỏ trống thì bắt đầu từ cấu hình trống"
+              fileName={fromName || undefined}
+              status={fromFile ? `${fromName} · ${fromFile.inputs?.length ?? 0} input · ${fromFile.costItems?.length ?? 0} cost item` : undefined}
+              onFile={async (f) => {
                 setFromFile(null);
+                setFromName(f?.name ?? '');
                 if (!f) return;
                 try {
                   const j = JSON.parse(await f.text());
@@ -120,7 +123,7 @@ export function FlowsPage() {
                 }
               }}
             />
-          </label>
+          </div>
         </div>
         <button type="button" className="primary" disabled={!/^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(id)} onClick={create}>
           <Icon name="plus" size={16} /> Tạo (thành bản nháp)

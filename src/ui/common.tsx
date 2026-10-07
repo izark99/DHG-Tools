@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Scalar } from '../engine/types';
+import { Icon } from './layout';
 
 export function download(data: ArrayBuffer | Blob | string, fileName: string, type = 'application/octet-stream') {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
@@ -145,4 +146,49 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | 
 
 export function readFileText(file: File): Promise<string> {
   return file.text();
+}
+
+/** Styled file picker (the native "Choose File" input stays hidden). */
+export function FilePick({
+  label,
+  required,
+  accept,
+  fileName,
+  status,
+  bad,
+  onFile,
+  extra,
+  emptyText = 'Chưa chọn file (.xlsx)',
+}: {
+  label: string;
+  required?: boolean;
+  accept: string;
+  fileName?: string;
+  status?: string;
+  bad?: boolean;
+  onFile: (f: File | undefined) => void;
+  extra?: ReactNode;
+  emptyText?: string;
+}) {
+  return (
+    <div className={`file-pick${status ? ' done' : ''}${bad ? ' bad' : ''}`}>
+      <div className="file-icon">
+        <Icon name={status ? 'check' : 'file'} />
+      </div>
+      <div className="file-info">
+        <div className="file-label">
+          {label}
+          {required && <em className="req">*</em>}
+        </div>
+        <div className="file-status">{status ?? (fileName ? fileName : emptyText)}</div>
+      </div>
+      <div className="file-actions">
+        {extra}
+        <label className="button">
+          <Icon name="upload" size={16} /> {fileName ? 'Đổi file' : 'Chọn file'}
+          <input type="file" accept={accept} hidden onChange={(e) => (onFile(e.target.files?.[0]), (e.target.value = ''))} />
+        </label>
+      </div>
+    </div>
+  );
 }

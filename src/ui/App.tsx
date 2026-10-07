@@ -10,7 +10,7 @@ import { TextsPage } from './admin/Texts';
 import { Icon, initials, PAGE_BAR_ID, ThemeToggle, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
-import { EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
+import { editOnClick, EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
 
 function useHash(): string {
   const [h, setH] = useState(() => window.location.hash.slice(1) || '/');
@@ -68,9 +68,11 @@ export function App() {
   else page = <Home user={user} />;
 
   const nav = (to: string, key: string, label: string, icon: string) => {
-    const active = to === '/' ? hash === '/' || hash.startsWith('/run') : hash.startsWith(to);
+    // "Chạy flow" covers the home page and every run page (#/run/<flow>), not #/run-file
+    const active = to === '/' ? hash === '/' || hash.startsWith('/run/') : hash.startsWith(to);
     return (
-      <a href={`#${to}`} className={active ? 'nav-item active' : 'nav-item'}>
+      // in edit mode the whole item edits its label: the active item looks like one big button
+      <a href={`#${to}`} className={active ? 'nav-item active' : 'nav-item'} onClick={editOnClick(key, label)}>
         <Icon name={icon} />
         <span>
           <T k={key}>{label}</T>
