@@ -7,6 +7,7 @@ import { MastersPage } from './admin/Masters';
 import { UsersPage } from './admin/Users';
 import { BackupPage } from './admin/Backup';
 import { TextsPage } from './admin/Texts';
+import { HelpPage } from './admin/Help';
 import { Icon, initials, PAGE_BAR_ID, ThemeToggle, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
@@ -63,6 +64,7 @@ export function App() {
   else if (parts[0] === 'admin' && parts[1] === 'users') page = <UsersPage me={user} />;
   else if (parts[0] === 'admin' && parts[1] === 'backup') page = <BackupPage />;
   else if (parts[0] === 'admin' && parts[1] === 'texts') page = <TextsPage />;
+  else if (parts[0] === 'admin' && parts[1] === 'help') page = <HelpPage />;
   else if (parts[0] === 'admin' && parts[1] === 'flows' && parts[2]) page = <FlowEditorPage flowId={decodeURIComponent(parts[2])} user={user} />;
   else if (parts[0] === 'admin' && parts[1] === 'flows') page = <FlowsPage />;
   else page = <Home user={user} />;
@@ -112,6 +114,7 @@ export function App() {
               {nav('/admin/users', 'nav.users', 'Người dùng', 'users')}
               {nav('/admin/texts', 'nav.texts', 'Giao diện', 'pen')}
               {nav('/admin/backup', 'nav.backup', 'Backup cấu hình', 'archive')}
+              {nav('/admin/help', 'nav.help', 'Hướng dẫn sử dụng', 'book')}
             </>
           )}
         </nav>

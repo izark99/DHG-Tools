@@ -2209,6 +2209,127 @@ button.mode-option.active {
   color: var(--text-2);
 }
 
+/* ---------- admin guide ---------- */
+.help-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.help-toc {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+button.help-toc-item {
+  height: auto;
+  min-height: 28px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-2);
+  font-weight: 400;
+}
+button.help-toc-item:hover:not(:disabled),
+button.help-toc-item.active {
+  background: var(--hover);
+  color: var(--text);
+}
+.help-body {
+  max-width: 860px;
+  min-width: 0;
+}
+.help-section {
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line-light);
+  scroll-margin-top: 16px;
+}
+.help-section:last-child {
+  border-bottom: none;
+}
+.help-section h2 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+.help-section h3 {
+  font-size: 13px;
+  margin: 18px 0 8px;
+}
+.help-section p {
+  margin: 0 0 10px;
+  color: var(--text-2);
+}
+.help-section ul,
+.help-section ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--text-2);
+}
+.help-section li {
+  margin-bottom: 6px;
+}
+.help-section b {
+  color: var(--text);
+  font-weight: 600;
+}
+.help-path {
+  white-space: nowrap;
+}
+.help-tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-bg);
+  color: var(--text-2);
+}
+.help-tip > .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+table.grid.help-table,
+table.grid.help-fns {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  border-collapse: separate;
+  overflow: hidden;
+}
+table.grid.help-table td,
+table.grid.help-fns td {
+  height: auto;
+  padding: 6px 10px;
+  vertical-align: top;
+  color: var(--text-2);
+}
+table.grid.help-table td:first-child {
+  width: 30%;
+  font-weight: 500;
+  color: var(--text);
+}
+table.grid.help-fns td:first-child {
+  width: 46%;
+}
+table.grid.help-fns code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.help-section .table-wrap {
+  max-height: none;
+  border: none;
+  margin-bottom: 10px;
+}
+
 @media (max-width: 1100px) {
   .run-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -2248,8 +2369,12 @@ button.mode-option.active {
     padding: 16px 16px 32px;
   }
   .split,
-  .editor-layout {
+  .editor-layout,
+  .help-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .help-toc {
+    position: static;
   }
   .form-grid {
     grid-template-columns: minmax(0, 1fr);
