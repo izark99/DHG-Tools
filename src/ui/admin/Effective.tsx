@@ -162,7 +162,7 @@ export function VersionTable({ versions, actions, selected }: { versions: Versio
               <td>
                 <StatePill state={v.state} />
               </td>
-              <td className="text-cell">{v.note || <span className="muted">—</span>}</td>
+              <td className="text-cell" data-no-text-edit="">{v.note || <span className="muted">—</span>}</td>
               <td className="nowrap">
                 {v.by ?? '—'}
                 <div className="muted small">{new Date(v.at).toLocaleString('vi-VN')}</div>

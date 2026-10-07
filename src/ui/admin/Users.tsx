@@ -56,13 +56,13 @@ export function UsersPage({ me }: { me: User }) {
               const locked = u.locked_until && u.locked_until > new Date().toISOString();
               return (
                 <tr key={u.username} className={u.active ? undefined : 'muted'}>
-                  <td>
+                  <td data-no-text-edit="">
                     <span className="user-cell">
                       <span className="avatar sm">{initials(u.display_name || u.username)}</span>
                       {u.username}
                     </span>
                   </td>
-                  <td>{u.display_name}</td>
+                  <td data-no-text-edit="">{u.display_name}</td>
                   <td>
                     <select
                       value={u.role}

@@ -11,7 +11,7 @@ import { HelpPage } from './admin/Help';
 import { Icon, initials, PAGE_BAR_ID, ThemeToggle, Toaster } from './layout';
 import { FlowsPage } from './admin/Flows';
 import { FlowEditorPage } from './admin/FlowEditor';
-import { editOnClick, EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
+import { AutoTexts, editOnClick, EditModeBar, loadTexts, setEditMode, setTextAdmin, T, TextEditor, useEditMode } from './texts';
 
 function useHash(): string {
   const [h, setH] = useState(() => window.location.hash.slice(1) || '/');
@@ -122,7 +122,7 @@ export function App() {
           <a href="#/account" className="user-chip" title="Tài khoản">
             <span className="avatar">{initials(name)}</span>
             <span className="user-meta">
-              <span className="user-name">{name}</span>
+              <span className="user-name" data-no-text-edit="">{name}</span>
               <span className="user-role">{isAdmin ? 'Quản trị viên' : 'Người dùng'}</span>
             </span>
           </a>
@@ -162,6 +162,7 @@ export function App() {
       <Toaster />
       <EditModeBar />
       <TextEditor />
+      <AutoTexts />
     </div>
   );
 }

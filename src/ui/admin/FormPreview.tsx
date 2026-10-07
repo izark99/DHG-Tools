@@ -41,7 +41,7 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
       </div>
     );
   return (
-    <div className="fp-wrap">
+    <div className="fp-wrap" data-no-text-edit="">
       <div className={`fp-paper ${L.orientation === 'portrait' ? 'portrait' : 'landscape'}`}>
         {L.companyName && <div className="fp-company">{fill(L.companyName)}</div>}
         {(L.preLines ?? []).map((t, k) => fill(t) && <div key={k} className="fp-pre">{fill(t)}</div>)}

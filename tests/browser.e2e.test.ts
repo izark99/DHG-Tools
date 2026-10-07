@@ -198,6 +198,46 @@ describe('browser end-to-end', () => {
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/editor-form-preview.png`, fullPage: true });
   });
 
+  it('quick start: a new empty flow is configured from a sample payroll file', async () => {
+    const id = `Q${RUN}`;
+    await page.goto(`${BASE}/#/admin/flows`);
+    await page.reload();
+    await page.getByLabel('Mã flow (A-Z, 0-9, _)').fill(id);
+    await page.getByRole('button', { name: 'Tạo (thành bản nháp)' }).click();
+    await page.getByText('Bắt đầu nhanh từ một file lương').waitFor();
+    await page.getByRole('button', { name: 'Chọn file lương mẫu' }).click();
+    await page.locator('.modal input[type=file]').setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
+    await page.locator('.modal').getByText(/tiêu đề ở dòng 3/).waitFor();
+    // roles are guessed from the headers
+    expect(await page.getByLabel('Vai trò cột Mã NV').inputValue()).toBe('key');
+    expect(await page.getByLabel('Vai trò cột Họ').inputValue()).toBe('name');
+    expect(await page.getByLabel('Vai trò cột Đơn vị').inputValue()).toBe('unit');
+    await page.getByLabel('Vai trò cột Lương thời gian').selectOption('amount');
+    await page.getByLabel('Vai trò cột Phụ cấp').selectOption('amount');
+    await page.getByLabel('Helper của Lương thời gian').fill('0301_LT');
+    await page.getByLabel('Cost code của Lương thời gian').fill('0301');
+    expect(await page.locator('.modal').getByRole('button', { name: 'Tạo cấu hình' }).isDisabled()).toBe(true); // no budget yet
+    await page.getByLabel('Budget mặc định cho mọi khoản').fill('HR');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/quick-start.png`, fullPage: true });
+    await page.locator('.modal').getByRole('button', { name: 'Tạo cấu hình' }).click();
+    // the same file becomes the sample data: values at once, configuration valid
+    await page.locator('.sample-bar').getByText(/^3 nhân viên/).waitFor();
+    await page.locator('.ov-node').getByText('2 cost item').waitFor();
+    // one cost code left blank: the overview says what to do next and opens the row
+    await page.locator('.ov-next').getByText('Thiếu Cost Code').waitFor();
+    await page.locator('.ov-next').getByRole('button', { name: /^Mở bước/ }).click();
+    await page.locator('table.ge tr.ge-flash[data-row="1"]').waitFor();
+    await page.locator('table.ge tbody tr[data-row="1"] td').nth(3).locator('input').fill('0319');
+    await page.locator('.editor-status .pill-ok').getByText('hợp lệ').waitFor();
+    await page.locator('.sample-bar').getByText(/3 dòng tổng hợp/).waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/quick-start-done.png`, fullPage: true });
+    await page.getByRole('button', { name: 'Lưu nháp' }).click();
+    await page.getByText('Đã lưu nháp. Không có lỗi cấu hình.').waitFor();
+    const draft = (await api('GET', `/api/flows/${id}`)).json.draft.config;
+    expect(draft.costItems.map((c: { helper: string; budget: string; amount: string }) => `${c.helper}:${c.budget}:${c.amount}`)).toEqual(['0301_LT:HR:luong_thoi_gian', 'PHU_CAP:HR:phu_cap']);
+    expect(draft.inputs[0].key).toBe('ma_nv');
+  });
+
   it('versions are effective-dated: each period runs the version in force for it', async () => {
     const v1 = (await api('GET', `/api/flows/${FLOW}/versions/1`)).json.config;
     expect((await api('PUT', `/api/flows/${FLOW}/draft`, { config: { ...v1, fileName: 'X_{MM}.xlsx' } })).status).toBe(200);
@@ -422,6 +462,7 @@ describe('browser end-to-end', () => {
       [
         '/api/flows',
         `/api/flows/${FLOW}/draft`,
+        `/api/flows/Q${RUN}/draft`,
         `/api/flows/${FLOW}/publish`,
         `/api/flows/${FLOW}/versions/2`,
         `/api/ledger-marks/e2e${RUN}`,
@@ -527,6 +568,35 @@ describe('browser end-to-end', () => {
     await page.goto(`${BASE}/#/`);
     await h1.getByText('Chọn flow để chạy').waitFor();
     expect(await page.locator('.guide').count()).toBe(0);
+  });
+
+  it('admin replaces any text on screen (not data); reset brings it back', async () => {
+    const heading = page.getByRole('heading', { name: 'Thao tác trên bảng' });
+    const replaced = `Cách dùng bảng ${RUN}`;
+    await page.goto(`${BASE}/#/admin/help`);
+    await page.reload();
+    await page.getByRole('button', { name: 'Chỉnh sửa giao diện', exact: true }).click();
+    await page.locator('.edit-bar').waitFor();
+    // (the heading is full width: point at its first letters)
+    await heading.hover({ position: { x: 12, y: 10 } });
+    await page.locator('.lit-hover').waitFor();
+    await heading.click({ position: { x: 12, y: 10 } });
+    await page.locator('.text-editor-head').getByText('áp dụng cho mọi chỗ có đúng chữ này').waitFor();
+    await page.getByLabel('Nội dung').fill(replaced);
+    await page.getByLabel('Nội dung').press('Enter');
+    await page.getByRole('heading', { name: replaced }).waitFor();
+    // data (a user's name in the sidebar) is not offered for editing
+    await page.locator('.user-name').hover();
+    await expect.poll(() => page.locator('.lit-hover').count()).toBe(0);
+    await page.locator('.edit-bar').getByRole('button', { name: 'Xong' }).click();
+    // saved for everyone: still there after a reload
+    await page.reload();
+    await page.getByRole('heading', { name: replaced }).waitFor();
+    await page.goto(`${BASE}/#/admin/texts`);
+    await page.locator('tr', { hasText: 'Thao tác trên bảng' }).getByRole('button', { name: 'Khôi phục mặc định' }).click();
+    await expect.poll(() => page.locator('tr', { hasText: replaced }).count()).toBe(0);
+    await page.goto(`${BASE}/#/admin/help`);
+    await heading.waitFor();
   });
 
   it('light / dark mode: the choice applies at once and survives a reload', async () => {

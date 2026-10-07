@@ -758,7 +758,7 @@ function MappingEditor({ def, st, onChange }: { def: InputDef; st: InputState; o
             <th>Alias đã khai báo</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-no-text-edit="">
           {def.fields.map((f) => {
             const idx = st.proposal.mapping[f.id];
             return (

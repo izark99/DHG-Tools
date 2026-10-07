@@ -199,19 +199,23 @@ export function GridEditor<T extends object>({
                         ⠿
                       </button>
                     </td>
-                    <td className="ge-no">{i + 1}</td>
+                    <td className="ge-no" data-no-text-edit="">{i + 1}</td>
                     {main.map((f) => (
                       <td key={f.key} className={f.kind === 'formula' ? 'ge-formula-col' : f.kind === 'bool' ? 'ge-bool-col' : undefined}>
                         <FieldInput f={f} value={rec[f.key]} item={rec} index={i} onChange={(v) => update(i, { [f.key]: v } as Partial<T>)} />
                         {sample && sampleIn === f.key && (
-                          <div className="ge-sample-in" title={sampleLabel}>
+                          <div className="ge-sample-in" title={sampleLabel} data-no-text-edit="">
                             <span className="ge-sample-eq">=</span>
                             {sample(item, i)}
                           </div>
                         )}
                       </td>
                     ))}
-                    {sampleCol && <td className="ge-sample-col">{sample(item, i)}</td>}
+                    {sampleCol && (
+                      <td className="ge-sample-col" data-no-text-edit="">
+                        {sample(item, i)}
+                      </td>
+                    )}
                     <td className="ge-actions-col">
                       <div className="ge-actions">
                         {expandable && (

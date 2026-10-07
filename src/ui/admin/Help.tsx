@@ -188,8 +188,25 @@ const SECTIONS: Section[] = [
       <>
         <p>
           <Path>Quản trị › Flows</Path>: danh sách flow, phiên bản đang dùng, bản nháp, và ô <i>hiện cho người dùng</i> (bỏ chọn để ẩn flow khỏi trang chạy).
-          Tạo flow mới từ cấu hình trống hoặc từ file JSON.
+          Tạo flow mới từ cấu hình trống, <b>sao chép từ một flow có sẵn</b> (hợp khi flow mới gần giống flow cũ), hoặc từ file JSON.
         </p>
+        <h3>Bắt đầu nhanh từ file lương mẫu</h3>
+        <p>
+          Flow mới (chưa có cost item) mở ra với nút <b>Chọn file lương mẫu</b> ở Tổng quan; flow đã có cấu hình thì dùng <i>Tạo lại từ file lương mẫu</i> hoặc nút ở bước
+          File đầu vào. Trợ lý:
+        </p>
+        <ol>
+          <li>Đọc file, tự tìm sheet và dòng tiêu đề (đổi được nếu đoán sai).</li>
+          <li>
+            Liệt kê mọi cột kèm ví dụ và tổng cột; đoán sẵn cột nào là <b>Mã nhân viên</b>, <b>Họ tên</b>, <b>Đơn vị</b>. Admin chọn cột nào là <b>Khoản tiền</b> (thành
+            cost item), cột nào chỉ <b>Đọc vào</b> để dùng trong công thức, cột nào bỏ qua.
+          </li>
+          <li>Với mỗi khoản tiền: Helper, Cost code (để trống được), tên khoản, Budget, vào Form 02 / Form 03.</li>
+          <li>
+            Bấm <b>Tạo cấu hình</b>: File đầu vào, Bảng nhân viên, Cost items, Gộp theo đơn vị được tạo; chính file đó thành dữ liệu mẫu. Ô <b>Nên làm tiếp</b> ở Tổng quan
+            chỉ bước còn thiếu hoặc còn lỗi, bấm để mở đúng dòng cần sửa.
+          </li>
+        </ol>
         <h3>Trình sửa: đi theo từng bước</h3>
         <p>
           Menu bên trái của trình sửa chia thành <b>Thiết lập</b> (các bước đánh số 1 → 10, số chuyển xanh khi bước đã xong và không lỗi) và <b>Công cụ</b>. Mục{' '}
@@ -266,6 +283,7 @@ const SECTIONS: Section[] = [
         </p>
         <h3>Thứ tự làm việc</h3>
         <ol>
+          <li>Flow mới: dùng trợ lý <b>Bắt đầu nhanh từ file lương mẫu</b>, rồi làm theo ô <i>Nên làm tiếp</i>.</li>
           <li>Nạp dữ liệu mẫu, đi lần lượt các bước 1 → 10 (nút <i>Bước tiếp</i>), sửa đến khi các số khớp file cũ → <b>Lưu nháp</b> (chưa ảnh hưởng người dùng).</li>
           <li>
             <b>Chạy thử</b> đầy đủ với ledger thật nếu flow dùng ledger, tải file và đối chiếu.
@@ -343,15 +361,23 @@ const SECTIONS: Section[] = [
     body: (
       <ul>
         <li>
-          Nút bút chì ở góc dưới sidebar (hoặc <Path>Quản trị › Giao diện</Path>) bật <b>chế độ chỉnh sửa giao diện</b>: chữ có viền nét đứt là sửa được, bấm vào →
-          sửa → <b>Lưu</b>. Thay đổi áp dụng ngay cho mọi người. Alt + bấm để mở link như thường.
+          Nút bút chì ở góc dưới sidebar (hoặc <Path>Quản trị › Giao diện</Path>) bật <b>chế độ chỉnh sửa giao diện</b>. Khi đó <b>mọi chữ trên giao diện</b> đều sửa
+          được: rê chuột lên chữ (hiện khung), bấm vào → sửa → <b>Lưu</b>. Thay đổi áp dụng ngay cho mọi người. Alt + bấm để dùng nút / mở link như thường.
+        </li>
+        <li>
+          Chữ có viền nét đứt (tiêu đề trang, menu, hướng dẫn) là văn bản riêng của từng chỗ. Các chữ khác (nút, tiêu đề cột, nhãn, giải thích…) khi sửa sẽ được thay ở{' '}
+          <b>mọi chỗ có đúng chữ đó</b>. Chữ có chứa số chỉ thay khi trùng nguyên văn.
+        </li>
+        <li>
+          Không sửa được ở đây: dữ liệu (tên flow, mã, số liệu lương, tên người dùng, bảng master) — sửa ở màn hình của dữ liệu đó. Chữ không bấm được (lựa chọn trong ô
+          chọn, chữ gợi ý trong ô nhập, chú thích khi rê chuột): dùng ô <i>Thay một chữ ở mọi nơi</i> ở trang Giao diện.
         </li>
         <li>
           Mỗi trang có khung <b>Hướng dẫn</b> (chỉ hiện khi có nội dung). Trang chạy flow có hướng dẫn chung và hướng dẫn riêng từng flow. Dòng bắt đầu bằng "- " thành
           gạch đầu dòng.
         </li>
         <li>
-          Trang <b>Giao diện</b> liệt kê văn bản đã sửa (khôi phục mặc định từng dòng) và cho sửa chữ của trang đăng nhập qua bản xem trước.
+          Trang <b>Giao diện</b> liệt kê văn bản đã sửa (chữ gốc → chữ mới, khôi phục mặc định từng dòng) và cho sửa chữ của trang đăng nhập qua bản xem trước.
         </li>
         <li>Chế độ sáng / tối / theo hệ thống: nút ở góc dưới sidebar hoặc Tài khoản › Giao diện hiển thị (lưu trên trình duyệt của mỗi người).</li>
       </ul>
