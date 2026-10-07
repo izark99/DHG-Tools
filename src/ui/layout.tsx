@@ -8,6 +8,12 @@ import {
   IconBook2,
   IconCalculator,
   IconCheck,
+  IconCopy,
+  IconTrash,
+  IconEye,
+  IconFlask,
+  IconArrowRight,
+  IconLayoutDashboard,
   IconChevronRight,
   IconDeviceDesktop,
   IconDeviceFloppy,
@@ -64,6 +70,12 @@ const ICONS: Record<string, TablerIcon> = {
   sun: IconSun,
   moon: IconMoon,
   desktop: IconDeviceDesktop,
+  copy: IconCopy,
+  trash: IconTrash,
+  eye: IconEye,
+  flask: IconFlask,
+  arrow: IconArrowRight,
+  overview: IconLayoutDashboard,
 };
 
 export function Icon({ name, size = 16 }: { name: string; size?: number }) {

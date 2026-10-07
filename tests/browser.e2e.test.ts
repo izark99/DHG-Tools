@@ -132,7 +132,7 @@ describe('browser end-to-end', () => {
 
     // break a formula → publish disabled with a clear message
     await page.getByRole('tab', { name: /^Bảng nhân viên/ }).click();
-    const f = page.locator('.list-editor .item').nth(2).locator('textarea');
+    const f = page.locator('table.ge tbody tr[data-row="2"] .formula textarea');
     await f.fill('[ins] + FOO(1)');
     await page.locator('.formula .ferr').getByText('tham chiếu tới cột đứng sau').first().waitFor();
     await page.locator('.formula .ferr').getByText('Hàm không hỗ trợ: FOO').first().waitFor();
@@ -152,6 +152,50 @@ describe('browser end-to-end', () => {
     await page.getByLabel('Hiệu lực từ năm').fill('2000');
     await page.locator('.modal').getByRole('button', { name: 'Publish' }).click();
     await page.getByText('Đang sửa từ: phiên bản v1 (hiện hành)').waitFor();
+  });
+
+  it('flow editor: overview, sample values next to each formula, keyboard reorder, print preview', async () => {
+    await page.goto(`${BASE}/#/`);
+    await page.goto(`${BASE}/#/admin/flows/${FLOW}`);
+    await page.reload(); // no toasts left from earlier tests
+    await page.getByText('Flow này chạy thế nào').waitFor();
+    await page.getByRole('button', { name: 'Nạp dữ liệu mẫu' }).click();
+    await page.locator('.sample-bar input[type=file]').first().setInputFiles({ name: 'luong.xlsx', mimeType: 'application/octet-stream', buffer: await salaryXlsx(EMPS) });
+    await page.locator('.sample-bar').getByText(/^3 nhân viên/).waitFor();
+    await page.locator('.ov-node').getByText('3 nhân viên').waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/editor-overview.png`, fullPage: true });
+
+    // employee table: value of the chosen employee and the total, live after an edit
+    await page.getByRole('tab', { name: /^Bảng nhân viên/ }).click();
+    const basic = page.locator('table.ge tbody tr[data-row="2"]');
+    await basic.locator('.sv-main').getByText('10,000,000').waitFor();
+    await basic.locator('.sv-total').getByText('Σ 30,000,000').waitFor();
+    await page.getByLabel('Nhân viên mẫu').selectOption('0200');
+    await basic.locator('.sv-main').getByText('12,000,000').waitFor();
+    await basic.locator('.formula textarea').fill('SUMOF(in.SalaryTable.basic) * 2');
+    await basic.locator('.sv-main').getByText('24,000,000').waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/editor-sample.png`, fullPage: true });
+    await basic.locator('.formula textarea').fill('SUMOF(in.SalaryTable.basic)');
+
+    // reorder with the keyboard on the drag handle
+    const label = (i: number) => page.locator(`table.ge tbody tr[data-row="${i}"] td`).nth(3).locator('input');
+    expect(await label(4).inputValue()).toBe('Phụ cấp');
+    await page.locator('table.ge tbody tr[data-row="4"] .grid-handle').press('ArrowUp');
+    expect(await label(3).inputValue()).toBe('Phụ cấp');
+    await page.locator('table.ge tbody tr[data-row="3"] .grid-handle').press('ArrowDown');
+    expect(await label(4).inputValue()).toBe('Phụ cấp');
+
+    // checks show their result on the sample
+    await page.getByRole('tab', { name: /^Kiểm tra/ }).click();
+    await page.locator('table.ge tbody tr[data-row="0"]').getByText('✓ đạt').waitFor();
+
+    // form: print preview with the sample rows; a header click opens that column
+    await page.getByRole('tab', { name: /^Form 02/ }).click();
+    expect(await page.locator('.fp-table tbody tr').count()).toBeGreaterThan(0);
+    expect(await page.locator('.fp-title').innerText()).not.toContain('{');
+    await page.locator('.fp-table th', { hasText: 'Thực trích' }).click();
+    await page.locator('table.ge tr.ge-flash').waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/editor-form-preview.png`, fullPage: true });
   });
 
   it('versions are effective-dated: each period runs the version in force for it', async () => {
