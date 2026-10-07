@@ -12,7 +12,7 @@ const thin: Partial<ExcelJS.Borders> = {
 };
 const NUM = '#,##0';
 
-function colWidth(c: FormColumn): number {
+export function colWidth(c: FormColumn): number {
   if (c.width) return c.width;
   if (c.type === 'number') return c.id === 'no' ? 6 : 16;
   return /desc|diễn giải/i.test(c.id + c.headerVi) ? 48 : 13;

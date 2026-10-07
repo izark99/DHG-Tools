@@ -190,74 +190,91 @@ const SECTIONS: Section[] = [
           <Path>Quản trị › Flows</Path>: danh sách flow, phiên bản đang dùng, bản nháp, và ô <i>hiện cho người dùng</i> (bỏ chọn để ẩn flow khỏi trang chạy).
           Tạo flow mới từ cấu hình trống hoặc từ file JSON.
         </p>
-        <h3>Các tab trong trình sửa</h3>
+        <h3>Trình sửa: đi theo từng bước</h3>
+        <p>
+          Menu bên trái của trình sửa chia thành <b>Thiết lập</b> (các bước đánh số 1 → 10, số chuyển xanh khi bước đã xong và không lỗi) và <b>Công cụ</b>. Mục{' '}
+          <b>Tổng quan</b> mở đầu tiên: sơ đồ flow (File đầu vào → Bảng nhân viên → Cost items → Gộp theo đơn vị → Form 02 / 03 → Ledger), danh sách bước còn
+          thiếu, và <b>ma trận cost item</b> (khoản nào vào Form 02, khoản nào vào Form 03 — đánh dấu trực tiếp). Bấm vào một ô của sơ đồ để tới bước đó.
+        </p>
         <table className="grid help-table">
           <tbody>
             <tr>
-              <td>Chung</td>
-              <td>Tên flow, mẫu tên file xuất (dùng {'{MM}'}, {'{YYYY}'}, {'{FLOW}'}, tham số chạy), tên ledger dùng chung.</td>
+              <td>1. Thông tin chung</td>
+              <td>Tên flow, mẫu tên file xuất (dùng {'{MM}'}, {'{YYYY}'}, {'{FLOW}'}, tham số chạy), tên sổ ledger dùng chung.</td>
             </tr>
             <tr>
-              <td>Inputs</td>
+              <td>2. File đầu vào</td>
               <td>
-                Các file lương cần tải. Mỗi trường có <b>alias</b> = các tên tiêu đề có thể gặp, cách nhau bởi "|"; không phân biệt hoa / thường, khoảng trắng, xuống
-                dòng. Trường bắt buộc phải tìm thấy cột mới chạy được.
+                Các file lương cần tải và các cột cần đọc. "Tên cột trong file" = các tiêu đề có thể gặp, cách nhau bởi "|"; không phân biệt hoa / thường, khoảng trắng,
+                xuống dòng. Khi có dữ liệu mẫu, cột bên phải cho biết tiêu đề nào trong file đã khớp (↔) hoặc <i>không thấy cột</i>.
               </td>
             </tr>
             <tr>
-              <td>Tham số chạy</td>
-              <td>Thông tin người chạy nhập: dòng "Đơn vị", tên người ký, chọn từ bảng master, chọn cost item… Gọi bằng run.&lt;mã&gt;.</td>
+              <td>3. Tham số chạy</td>
+              <td>Thông tin người chạy nhập: người lập, người ký, chọn từ bảng master, chọn cost item… Gọi bằng run.&lt;mã&gt;.</td>
             </tr>
             <tr>
-              <td>Bảng nhân viên</td>
-              <td>Mỗi cột là một công thức tính cho từng nhân viên, theo thứ tự (chỉ dùng cột phía trên). Đây là phần tương ứng sheet Form 01.</td>
+              <td>4. Bảng nhân viên</td>
+              <td>Mỗi dòng của bảng là một cột tính cho từng nhân viên, theo thứ tự (chỉ dùng cột phía trên). Tương ứng sheet Form 01.</td>
             </tr>
             <tr>
-              <td>Cost items</td>
+              <td>5. Cost items</td>
+              <td>Mỗi khoản: helper, cost code, tên, lấy tiền từ cột nào, kỳ, budget, vào F02 / F03. Bấm ▸ để mở tuỳ chọn thêm (tên EN, phần NLĐ, đổi helper / cost center, bộ lọc đơn vị).</td>
+            </tr>
+            <tr>
+              <td>6. Gộp theo đơn vị</td>
+              <td>Bảng đơn vị, cột Dept / Cost Center / Sector, câu diễn giải. Có dữ liệu mẫu thì xem ngay các dòng sau khi gộp.</td>
+            </tr>
+            <tr>
+              <td>7–8. Form 02 / Form 03</td>
               <td>
-                Mỗi khoản: helper (vd. <code>0407M_RE</code>), tên, budget (tên cột của bảng đơn vị hoặc mã cố định), cột số tiền, có trích / có chi, bộ lọc đơn vị.
+                Bật / tắt, <b>đợt chạy</b> (Trích / Chi), điều chỉnh theo ledger, <b>ghi vào ledger</b>; <b>Xem trước bản in</b> giống file Excel (bấm tiêu đề cột trên bản
+                xem trước để tới cột đó); phần <i>Cột &amp; công thức</i> và <i>Tiêu đề &amp; chữ ký</i>.
               </td>
             </tr>
             <tr>
-              <td>Tổng hợp</td>
-              <td>Gộp theo Đơn vị × Budget × Cost Center × Helper; bảng đơn vị, cột Dept / Cost Center / Sector, mẫu diễn giải.</td>
+              <td>9. Kiểm tra</td>
+              <td>Điều kiện phải ĐÚNG. Mức <b>Chặn</b> không cho xuất file, <b>Cảnh báo</b> chỉ nhắc. Có dữ liệu mẫu thì mỗi dòng hiện ✓ đạt / ✕ số lần không đạt.</td>
             </tr>
             <tr>
-              <td>Form 02 / Form 03</td>
-              <td>
-                Bật / tắt form, <b>đợt chạy</b> (Trích / Chi), điều chỉnh theo ledger, <b>ghi vào ledger</b> (accrual / actual / cả hai với actual = accrual),
-                các cột (công thức theo row.*), tiêu đề, chữ ký, khối chân trang.
-              </td>
-            </tr>
-            <tr>
-              <td>Kiểm tra</td>
-              <td>Công thức trả TRUE = đạt. Mức <b>error</b> chặn xuất file, <b>warning</b> chỉ cảnh báo.</td>
-            </tr>
-            <tr>
-              <td>Sheet thêm</td>
+              <td>10. Sheet thêm</td>
               <td>Sheet tổng hợp tuỳ ý (ví dụ Summary của IN), mỗi ô là một công thức tổng.</td>
             </tr>
             <tr>
-              <td>Lỗi cấu hình</td>
-              <td>Mọi lỗi công thức và tham chiếu. Còn lỗi thì không publish được.</td>
-            </tr>
-            <tr>
-              <td>JSON / Phiên bản / Chạy thử</td>
-              <td>Sửa JSON trực tiếp; lịch sử phiên bản (so sánh, publish lại, huỷ hiệu lực); chạy thử bản đang sửa (file có hậu tố _TEST, không ghi nhật ký).</td>
+              <td>Công cụ</td>
+              <td>
+                <b>Lỗi cấu hình</b> (gom theo bước, bấm để tới chỗ sửa; còn lỗi thì không publish được), <b>Chạy thử</b> đầy đủ như người dùng (file có dòng BẢN CHẠY THỬ),{' '}
+                <b>Phiên bản</b> (so sánh, publish lại, huỷ hiệu lực), <b>JSON</b> (nâng cao).
+              </td>
             </tr>
           </tbody>
         </table>
+        <h3>Thao tác trên bảng</h3>
+        <ul>
+          <li>Sửa trực tiếp trong ô, như Excel. Di chuột lên tiêu đề cột có gạch chấm để xem giải thích.</li>
+          <li>
+            Kéo biểu tượng <b>⠿</b> ở đầu dòng để đổi thứ tự (hoặc bấm vào ⠿ rồi dùng phím ↑ / ↓). Thứ tự quan trọng ở bảng nhân viên (cột dưới dùng cột trên) và
+            cột Form (thứ tự in).
+          </li>
+          <li>Cuối dòng: ▸ mở chi tiết (tuỳ chọn ít dùng, danh sách con), nhân bản dòng, xoá dòng. Dòng có lỗi tô đỏ, lỗi ghi ngay dưới dòng.</li>
+        </ul>
+        <h3>Dữ liệu mẫu — đối chiếu khi đang sửa</h3>
+        <p>
+          Thanh <b>Dữ liệu mẫu</b> ở đầu mỗi bước: nạp một file lương thật (chỉ đọc trên máy, không gửi lên server, không lưu), chọn tháng / năm, tham số. Cấu hình
+          đang sửa được tính lại sau mỗi thay đổi; dưới mỗi công thức hiện <b>= giá trị của nhân viên đang chọn · Σ tổng</b>. Đổi nhân viên ở ô <i>Xem nhân viên</i>{' '}
+          để đối chiếu với file Excel cũ. Dữ liệu mẫu dùng master data hiện hành và ledger trống (điều chỉnh = 0); muốn thử với ledger thật dùng <b>Chạy thử</b>.
+        </p>
         <h3>Thứ tự làm việc</h3>
         <ol>
-          <li>Sửa các tab → <b>Lưu nháp</b> (bản nháp chưa ảnh hưởng người dùng).</li>
+          <li>Nạp dữ liệu mẫu, đi lần lượt các bước 1 → 10 (nút <i>Bước tiếp</i>), sửa đến khi các số khớp file cũ → <b>Lưu nháp</b> (chưa ảnh hưởng người dùng).</li>
           <li>
-            Tab <b>Chạy thử</b> với một file lương thật hoặc file synthetic, đối chiếu kết quả.
+            <b>Chạy thử</b> đầy đủ với ledger thật nếu flow dùng ledger, tải file và đối chiếu.
           </li>
           <li>
             <b>Publish</b>: chọn kỳ bắt đầu hiệu lực và ghi chú. Người dùng chạy kỳ đó trở đi sẽ dùng phiên bản mới.
           </li>
           <li>
-            Quay lại cấu hình cũ: tab <b>Phiên bản</b> › <i>Publish lại</i> phiên bản cũ với kỳ hiệu lực mới.
+            Quay lại cấu hình cũ: <b>Phiên bản</b> › <i>Publish lại</i> phiên bản cũ với kỳ hiệu lực mới.
           </li>
         </ol>
         <Tip>
@@ -436,7 +453,7 @@ const SECTIONS: Section[] = [
           </tr>
           <tr>
             <td>Không publish được</td>
-            <td>Còn lỗi ở tab Lỗi cấu hình, hoặc công thức tham chiếu bảng / cột không có trong master data của kỳ hiệu lực đã chọn.</td>
+            <td>Còn lỗi ở mục Lỗi cấu hình, hoặc công thức tham chiếu bảng / cột không có trong master data của kỳ hiệu lực đã chọn.</td>
           </tr>
           <tr>
             <td>Người dùng không thấy flow</td>
