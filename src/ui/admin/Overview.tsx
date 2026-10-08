@@ -29,8 +29,12 @@ function Node({ title, value, sub, errors, onClick, off, tone }: { title: string
         {title}
         {errors > 0 && <span className="tab-count tab-count-error">{errors}</span>}
       </span>
-      <span className="ov-node-value">{value}</span>
-      {sub && <span className="ov-node-sub">{sub}</span>}
+      <span className="ov-node-value" data-no-text-edit="">{value}</span>
+      {sub && (
+        <span className="ov-node-sub" data-no-text-edit="">
+          {sub}
+        </span>
+      )}
     </button>
   );
 }
@@ -48,6 +52,7 @@ export function Overview({
   sample,
   go,
   setCostItems,
+  onQuickStart,
 }: {
   cfg: FlowConfig;
   errors: ConfigError[];
@@ -55,6 +60,7 @@ export function Overview({
   sample: Sample;
   go: (tab: string, focus?: number) => void;
   setCostItems: (items: CostItem[]) => void;
+  onQuickStart: () => void;
 }) {
   const r = sample.result;
   const count = (prefix: string | readonly string[]) => errors.filter((e) => (typeof prefix === 'string' ? [prefix] : prefix).some((p) => e.path.startsWith(p))).length;
@@ -79,10 +85,54 @@ export function Overview({
   const itemTotal = (c: CostItem) => (r ? sumBy(r.aggRows.filter((a) => a.helper === c.helper), (a) => a.amount) : null);
   const update = (i: number, patch: Partial<CostItem>) => setCostItems(cfg.costItems.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
+  const fresh = cfg.costItems.length === 0;
+  // the first step that has errors or is still missing: what to do next
+  const next = steps.find((s) => s.no && ((s.prefix && count(s.prefix) > 0) || (!s.optional && s.done && !s.done(cfg))));
+  const nextErr = next?.prefix ? errors.find((e) => (typeof next.prefix === 'string' ? [next.prefix] : next.prefix!).some((p) => e.path.startsWith(p))) : undefined;
   return (
     <div className="overview">
+      {fresh ? (
+        <div className="qs-hero">
+          <div className="qs-hero-icon">
+            <Icon name="rocket" size={20} />
+          </div>
+          <div className="qs-hero-text">
+            <h3>Bắt đầu nhanh từ một file lương</h3>
+            <p>
+              Chọn một file lương có sẵn: hệ thống đọc các cột, admin chỉ cần đánh dấu cột nào là Mã nhân viên, Đơn vị và khoản tiền nào cần lên Form. File đầu vào, bảng nhân
+              viên và cost items được tạo tự động, file đó dùng luôn làm dữ liệu mẫu để đối chiếu.
+            </p>
+          </div>
+          <button type="button" className="primary lg" onClick={onQuickStart}>
+            <Icon name="upload" size={16} /> Chọn file lương mẫu
+          </button>
+        </div>
+      ) : (
+        next && (
+          <div className="ov-next">
+            <span className="step-no big">{next.no}</span>
+            <div className="ov-next-text">
+              <strong>Nên làm tiếp: {next.label}</strong>
+              <span className="muted small">{nextErr ? nextErr.message : next.hint}</span>
+            </div>
+            <button type="button" className="primary" onClick={() => {
+                const m = nextErr && /\[(\d+)\]/.exec(nextErr.path);
+                go(next.id, m ? Number(m[1]) : undefined);
+              }}>
+              Mở bước {next.no}
+            </button>
+          </div>
+        )
+      )}
       <section>
-        <h3 className="section-title">Flow này chạy thế nào</h3>
+        <div className="ov-head">
+          <h3 className="section-title">Flow này chạy thế nào</h3>
+          {!fresh && (
+            <button type="button" className="sm" onClick={onQuickStart}>
+              <Icon name="upload" size={14} /> Tạo lại từ file lương mẫu
+            </button>
+          )}
+        </div>
         <p className="muted small">Mỗi ô là một bước, đi từ trái sang phải. Bấm vào ô để sửa bước đó.{!sample.on && ' Nạp dữ liệu mẫu (thanh phía trên) để thấy số liệu thật ở từng bước.'}</p>
         <div className="ov-pipe">
           <Node
@@ -169,12 +219,12 @@ export function Overview({
                 <th>Tên khoản</th>
                 <th>Lấy số tiền từ cột</th>
                 <th>Kỳ</th>
-                <th className="center">Trích · Form 02</th>
-                <th className="center">Chi · Form 03</th>
+                <th className="ta-center">Trích · Form 02</th>
+                <th className="ta-center">Chi · Form 03</th>
                 {r && <th className="num">Tổng mẫu</th>}
               </tr>
             </thead>
-            <tbody>
+            <tbody data-no-text-edit="">
               {cfg.costItems.map((c, i) => {
                 const bad = errors.some((e) => e.path.startsWith(`costItems[${i}]`));
                 const t = itemTotal(c);
@@ -188,10 +238,10 @@ export function Overview({
                     <td>{c.nameVi}</td>
                     <td>{c.amount ? <code>{c.amount}</code> : <span className="muted">— (chỉ để tra cứu)</span>}</td>
                     <td>{c.periodType}</td>
-                    <td className="center">
+                    <td className="ta-center">
                       <input type="checkbox" aria-label={`${c.helper} vào Form 02`} checked={c.accrue} onChange={(e) => update(i, { accrue: e.target.checked })} />
                     </td>
-                    <td className="center">
+                    <td className="ta-center">
                       <input type="checkbox" aria-label={`${c.helper} vào Form 03`} checked={c.pay} onChange={(e) => update(i, { pay: e.target.checked })} />
                     </td>
                     {r && <td className="num">{t === null ? '—' : fmt(t)}</td>}

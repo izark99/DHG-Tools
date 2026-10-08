@@ -71,7 +71,7 @@ export function Home({ user }: { user: User }) {
                 <div className="flow-icon">{f.id.slice(0, 3).toUpperCase()}</div>
                 <span className={f.published ? 'pill pill-ok' : 'pill'}>{f.published ? `v${f.published.version}` : 'chưa publish'}</span>
               </div>
-              <div className="flow-name">{f.name}</div>
+              <div className="flow-name" data-no-text-edit="">{f.name}</div>
               <div className="flow-meta">{r
                   ? `Lần chạy gần nhất: kỳ ${r.period}${r.mode && r.mode !== 'both' ? ` (${RUN_MODE_LABEL[r.mode]})` : ''} · ${r.user} · ${new Date(r.at).toLocaleDateString('vi-VN')}`
                   : 'Chưa chạy lần nào'}</div>

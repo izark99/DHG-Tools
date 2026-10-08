@@ -12,12 +12,21 @@ export function FlowsPage() {
   const [name, setName] = useState('');
   const [fromFile, setFromFile] = useState<FlowConfig | null>(null);
   const [fromName, setFromName] = useState('');
+  const [copyOf, setCopyOf] = useState('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const create = async () => {
     setMsg(null);
     try {
-      const cfg = fromFile ? { ...fromFile, id, name: name || fromFile.name } : blankConfig(id, name || id);
+      let base: FlowConfig | null = fromFile;
+      if (!base && copyOf) {
+        // the draft of the source flow if any, else its version in force
+        const d = await api.flow(copyOf);
+        const v = d.versions.find((x) => x.state === 'current') ?? d.versions.find((x) => x.state !== 'cancelled' && x.state !== 'superseded');
+        base = d.draft?.config ?? (v ? (await api.version(copyOf, v.version)).config : null);
+        if (!base) throw new Error(`Flow ${copyOf} chưa có cấu hình để sao chép`);
+      }
+      const cfg = base ? { ...structuredClone(base), id, name: name || `${base.name} (bản sao)` } : blankConfig(id, name || id);
       await api.createFlow(id, name || cfg.name, cfg);
       window.location.hash = `/admin/flows/${encodeURIComponent(id)}`;
     } catch (e) {
@@ -61,8 +70,8 @@ export function FlowsPage() {
                     onBlur={(e) => Number(e.target.value) !== f.sort && api.patchFlow(f.id, { sort: Number(e.target.value) }).then(list.reload)}
                   />
                 </td>
-                <td>{f.id}</td>
-                <td>{f.name}</td>
+                <td data-no-text-edit="">{f.id}</td>
+                <td data-no-text-edit="">{f.name}</td>
                 <td>
                   {f.published ? (
                     <>
@@ -100,6 +109,20 @@ export function FlowsPage() {
             Tên
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
+          <label className="field">
+            Sao chép cấu hình từ flow có sẵn (tuỳ chọn)
+            <select value={copyOf} disabled={!!fromFile} onChange={(e) => setCopyOf(e.target.value)}>
+              <option value="">— không, bắt đầu từ cấu hình trống —</option>
+              {(list.data?.flows ?? []).map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.id} — {f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted small wide">
+            Bắt đầu từ cấu hình trống thì trình sửa có <b>trợ lý từ file lương mẫu</b>: chọn một file lương, đánh dấu các cột, hệ thống tạo sẵn phần lớn cấu hình.
+          </p>
           <div className="wide">
             <FilePick
               label="Bắt đầu từ file cấu hình JSON (tuỳ chọn)"

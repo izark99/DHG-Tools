@@ -121,7 +121,7 @@ export function PageHeader({ title, subtitle, actions, crumb, icon }: { title: R
             <span className="crumb-sep">/</span>
           </>
         )}
-        <h1>{title}</h1>
+        <h1 data-no-text-edit={typeof title === 'string' ? '' : undefined}>{title}</h1>
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </div>

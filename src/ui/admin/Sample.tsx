@@ -132,7 +132,7 @@ export function SampleBar({ cfg, sample, open, setOpen, files, load, month, setM
         <strong>Dữ liệu mẫu</strong>
         {sample.on ? (
           <>
-            <span className="muted small sample-summary">
+            <span className="muted small sample-summary" data-no-text-edit="">
               {r ? `${r.employees.length} nhân viên · ${r.aggRows.length} dòng tổng hợp` : '—'}
               {errs > 0 && <span className="pill pill-bad">{errs} lỗi</span>}
               {warns > 0 && <span className="pill pill-warn">{warns} cảnh báo</span>}

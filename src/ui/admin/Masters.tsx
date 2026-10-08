@@ -57,7 +57,7 @@ export function MastersPage() {
                   <li key={c.name}>
                     <button type="button" className={c.name === name ? 'side-item active' : 'side-item'} onClick={() => (setLoaded(null), setSel(c.name))}>
                       <Icon name="table" size={16} />
-                      <span className="side-name">{c.name}</span>
+                      <span className="side-name" data-no-text-edit="">{c.name}</span>
                       <span className="side-count" title={t ? `v${t.version}, ${t.rows.length} dòng` : 'Không có phiên bản hiệu lực cho kỳ đang xem'}>
                         {t ? `v${t.version} · ${t.rows.length}` : '—'}
                       </span>
@@ -394,7 +394,7 @@ function MasterEditor({
         )}
       </div>
       <div className="table-wrap">
-        <table className="grid edit">
+        <table className="grid edit" data-no-text-edit="">
           <thead>
             <tr>
               <th></th>

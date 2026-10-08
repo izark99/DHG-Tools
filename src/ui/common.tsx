@@ -89,7 +89,7 @@ export function DataTable({ columns, rows, pageSize = 100, footer }: { columns: 
           </button>
         </span>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" data-no-text-edit="">
         <table className="grid">
           <thead>
             <tr>

@@ -19,6 +19,7 @@ import { GridEditor } from './GridEditor';
 import { Overview } from './Overview';
 import { SampleBar, SampleValue, sumBy, useSample } from './Sample';
 import { FormPreview } from './FormPreview';
+import { QuickStart } from './QuickStart';
 import { Versions } from './Versions';
 import { EffectiveDialog, range } from './Effective';
 
@@ -126,6 +127,14 @@ function Editor({
   const at = (site: FormulaSite) => scopeFor(cfg, vctx, site);
   const { sample, bar } = useSample(cfg, masters);
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [quick, setQuick] = useState(false);
+  const applyQuick = (patch: Partial<FlowConfig>, file: File) => {
+    set(patch);
+    setQuick(false);
+    if (patch.inputs?.[0]) void bar.load(patch.inputs[0], file);
+    go('overview');
+    toast('ok', 'Đã tạo cấu hình từ file mẫu (chưa lưu). Xem các bước còn thiếu ở Tổng quan, rồi Lưu nháp.');
+  };
   const allRead = sample.on && cfg.inputs.filter((i) => i.required).every((i) => sample.parsed[i.id]?.data);
   useEffect(() => {
     if (allRead) setSampleOpen(false);
@@ -297,7 +306,8 @@ function Editor({
           {step && <SampleBar cfg={cfg} sample={sample} open={sampleOpen} setOpen={setSampleOpen} {...bar} />}
           {intro}
 
-          {tab === 'overview' && <Overview cfg={cfg} errors={errors} steps={[...STEPS]} sample={sample} go={go} setCostItems={(costItems) => set({ costItems })} />}
+          {quick && <QuickStart cfg={cfg} masters={masters} onApply={applyQuick} onClose={() => setQuick(false)} />}
+          {tab === 'overview' && <Overview cfg={cfg} errors={errors} steps={[...STEPS]} sample={sample} go={go} setCostItems={(costItems) => set({ costItems })} onQuickStart={() => setQuick(true)} />}
 
           {tab === 'errors' && (
             <Card title="Lỗi cấu hình">
@@ -328,6 +338,13 @@ function Editor({
           )}
 
           {tab === 'inputs' && (
+            <>
+            <div className="step-tip">
+              <span>Có sẵn file lương? Để hệ thống đọc các cột và tạo sẵn cấu hình.</span>
+              <button type="button" onClick={() => setQuick(true)}>
+                <Icon name="upload" size={16} /> Tạo từ file lương mẫu
+              </button>
+            </div>
             <GridEditor<InputDef>
               items={cfg.inputs}
               onChange={(inputs) => set({ inputs })}
@@ -419,6 +436,7 @@ function Editor({
                 );
               }}
             />
+            </>
           )}
 
           {tab === 'params' && (

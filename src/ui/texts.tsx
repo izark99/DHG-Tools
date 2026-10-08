@@ -1,6 +1,10 @@
 // Interface texts that admins edit in place.
 //   <T k="home.title">Chọn flow để chạy</T>   text with a built-in default (children)
 //   <Guide k="home.guide" />                   instruction block, hidden while empty
+//   any other text on screen                   <AutoTexts /> lets the admin click it and replace it:
+//                                              stored as "lit.<hash>" = {"from","to"} and applied to
+//                                              every text node (and placeholder / title) equal to "from".
+//                                              Data areas are marked data-no-text-edit and left alone.
 // Admin turns on "Chỉnh sửa giao diện": every editable text gets a dashed outline (outline only, so
 // nothing moves) and a click opens a small editor. Saved texts go to the server and apply to everyone;
 // "Khôi phục mặc định" deletes the override. Texts are rendered as plain text, never as HTML.
@@ -18,6 +22,41 @@ interface Editing {
   hint?: string;
 }
 
+// ---- literal overrides ("lit.<hash>") ----
+export const LIT_PREFIX = 'lit.';
+export const normText = (s: string) => s.replace(/\s+/g, ' ').trim();
+/** Stable key for a literal text (two FNV-1a 32-bit hashes). */
+export function litKey(text: string): string {
+  const t = normText(text);
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ t.length;
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return LIT_PREFIX + a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+}
+export function parseLit(v: string | undefined): { from: string; to: string } | null {
+  if (!v) return null;
+  try {
+    const o = JSON.parse(v);
+    return typeof o?.from === 'string' && typeof o?.to === 'string' ? o : null;
+  } catch {
+    return null;
+  }
+}
+let litMap = new Map<string, string>();
+function rebuildLit() {
+  const m = new Map<string, string>();
+  for (const [k, v] of Object.entries(texts))
+    if (k.startsWith(LIT_PREFIX)) {
+      const o = parseLit(v);
+      if (o) m.set(normText(o.from), o.to);
+    }
+  litMap = m;
+}
+
 // ---- store ----
 let texts: Record<string, string> = {};
 let canEdit = false;
@@ -26,6 +65,7 @@ let editing: Editing | null = null;
 let version = 0;
 const subs = new Set<() => void>();
 const emit = () => {
+  rebuildLit();
   version++;
   subs.forEach((f) => f());
 };
@@ -89,6 +129,15 @@ export function useSavedTexts(): Record<string, string> {
 export async function resetText(key: string): Promise<void> {
   await api.deleteText(key);
   dropText(key);
+  emit();
+}
+
+/** Replace a literal text everywhere (used by the Giao diện page for texts that cannot be clicked). */
+export async function saveLiteral(from: string, to: string): Promise<void> {
+  const f = normText(from);
+  const key = litKey(f);
+  const r = await api.putText(key, JSON.stringify({ from: f, to }));
+  texts = { ...texts, [key]: r.value };
   emit();
 }
 
@@ -230,7 +279,8 @@ function dropText(key: string) {
 }
 
 function EditorBox({ cur }: { cur: Editing }) {
-  const [draft, setDraft] = useState(() => texts[cur.key] ?? cur.fallback);
+  const lit = cur.key.startsWith(LIT_PREFIX);
+  const [draft, setDraft] = useState(() => (lit ? (parseLit(texts[cur.key])?.to ?? cur.fallback) : (texts[cur.key] ?? cur.fallback)));
   const [busy, setBusy] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -261,7 +311,7 @@ function EditorBox({ cur }: { cur: Editing }) {
         if (changed) await api.deleteText(cur.key);
         dropText(cur.key);
       } else {
-        const r = await api.putText(cur.key, draft);
+        const r = await api.putText(cur.key, lit ? JSON.stringify({ from: cur.fallback, to: draft }) : draft);
         texts = { ...texts, [cur.key]: r.value };
       }
       editing = null;
@@ -286,7 +336,7 @@ function EditorBox({ cur }: { cur: Editing }) {
       <div ref={box} className="text-editor" style={pos ?? { top: -9999, left: -9999 }} role="dialog" aria-label="Sửa văn bản">
         <div className="text-editor-head">
           <span>Sửa văn bản</span>
-          <code>{cur.key}</code>
+          {lit ? <span className="muted small">áp dụng cho mọi chỗ có đúng chữ này</span> : <code>{cur.key}</code>}
         </div>
         <textarea ref={input} rows={cur.multiline ? 6 : 2} value={draft} maxLength={4000} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKey} aria-label="Nội dung" />
         <div className="text-editor-hint">
@@ -322,10 +372,190 @@ export function EditModeBar() {
   return (
     <div className="edit-bar" role="status">
       <Icon name="pen" size={16} />
-      <span title="Bấm vào chữ có viền nét đứt để sửa. Alt+bấm để mở link / bấm nút như thường. Thay đổi áp dụng cho mọi người dùng.">Chỉnh sửa giao diện: bấm chữ có viền để sửa · Alt+bấm để mở link</span>
+      <span title="Bấm vào bất kỳ chữ nào để sửa (chữ có viền nét đứt, hoặc chữ được khung khi rê chuột). Alt+bấm để mở link / bấm nút như thường. Thay đổi áp dụng cho mọi người dùng.">
+        Chỉnh sửa giao diện: bấm vào chữ bất kỳ để sửa · Alt+bấm để dùng nút / link
+      </span>
       <button type="button" className="primary" onClick={() => setEditMode(false)}>
         Xong
       </button>
     </div>
+  );
+}
+
+// ---- every other text on screen ----------------------------------------------------------------
+
+const SKIP = 'script,style,textarea,input,select,code,pre,[contenteditable="true"],[data-no-text-edit],.text-editor,.text-editor-backdrop,.edit-bar,[data-text-key],.lit-hover';
+const ATTRS = ['placeholder', 'title'] as const;
+/** text we wrote into a node, and the text React had put there */
+const shownText = new WeakMap<Text, string>();
+const origText = new WeakMap<Text, string>();
+const origAttr = new WeakMap<Element, Record<string, { orig: string; shown: string }>>();
+
+const worthy = (s: string) => /\p{L}/u.test(s);
+function skipped(el: Element | null): boolean {
+  return !el || !!el.closest(SKIP);
+}
+/** The text the app put in this node (before any override of ours). */
+function originalOf(node: Text): string {
+  const cur = node.nodeValue ?? '';
+  return shownText.get(node) === cur && origText.has(node) ? origText.get(node)! : cur;
+}
+function applyText(node: Text) {
+  const cur = node.nodeValue ?? '';
+  const ours = shownText.get(node) === cur && origText.has(node);
+  const original = ours ? origText.get(node)! : cur;
+  const n = normText(original);
+  const to = n && worthy(n) && !skipped(node.parentElement) ? litMap.get(n) : undefined;
+  if (to !== undefined) {
+    const next = (/^\s*/.exec(original)?.[0] ?? '') + to + (/\s*$/.exec(original)?.[0] ?? '');
+    origText.set(node, original);
+    shownText.set(node, next);
+    if (cur !== next) node.nodeValue = next;
+  } else if (ours) {
+    node.nodeValue = original;
+    origText.delete(node);
+    shownText.delete(node);
+  }
+}
+function applyAttrs(el: Element) {
+  let rec = origAttr.get(el);
+  for (const a of ATTRS) {
+    const cur = el.getAttribute(a);
+    if (cur === null) continue;
+    const mine = rec?.[a];
+    const original = mine && mine.shown === cur ? mine.orig : cur;
+    const to = worthy(original) && !skipped(el.parentElement) ? litMap.get(normText(original)) : undefined;
+    if (to !== undefined) {
+      rec = rec ?? {};
+      rec[a] = { orig: original, shown: to };
+      origAttr.set(el, rec);
+      if (cur !== to) el.setAttribute(a, to);
+    } else if (mine && mine.shown === cur) {
+      el.setAttribute(a, original);
+      delete rec![a];
+    }
+  }
+}
+function applyTree(root: Node) {
+  if (root.nodeType === Node.TEXT_NODE) return applyText(root as Text);
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  const el = root as Element;
+  if (el.closest('[data-no-text-edit]')) return;
+  applyAttrs(el);
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.nodeType === Node.ELEMENT_NODE && (n as Element).hasAttribute('data-no-text-edit') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    if (n.nodeType === Node.TEXT_NODE) applyText(n as Text);
+    else applyAttrs(n as Element);
+  }
+}
+
+/** The text node right under the pointer (only if the pointer is really on its glyphs). */
+function textAt(x: number, y: number): Text | null {
+  const d = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node } | null };
+  const node = d.caretRangeFromPoint ? d.caretRangeFromPoint(x, y)?.startContainer : d.caretPositionFromPoint?.(x, y)?.offsetNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE || !worthy(node.nodeValue ?? '')) return null;
+  const r = document.createRange();
+  r.selectNodeContents(node);
+  for (const b of r.getClientRects()) if (x >= b.left - 2 && x <= b.right + 2 && y >= b.top - 2 && y <= b.bottom + 2) return node as Text;
+  return null;
+}
+function rectOf(node: Text): DOMRect {
+  const r = document.createRange();
+  r.selectNodeContents(node);
+  return r.getBoundingClientRect();
+}
+
+/**
+ * Mounted once in the shell: applies the literal overrides to everything React renders, and in edit
+ * mode outlines the text under the pointer and opens the editor on click.
+ */
+export function AutoTexts() {
+  const { editMode: on } = useStore();
+  const [hover, setHover] = useState<{ rect: DOMRect; changed: boolean } | null>(null);
+
+  // apply now and after every change of the overrides or of the page
+  useEffect(() => {
+    applyTree(document.body);
+  }, [version]);
+  useEffect(() => {
+    const pending = new Set<Node>();
+    let frame = 0;
+    const flush = () => {
+      frame = 0;
+      for (const n of pending) if (n.isConnected) applyTree(n);
+      pending.clear();
+    };
+    const mo = new MutationObserver((muts) => {
+      if (!litMap.size) return;
+      for (const m of muts) {
+        if (m.type === 'characterData') pending.add(m.target);
+        else if (m.type === 'attributes') pending.add(m.target);
+        else m.addedNodes.forEach((n) => pending.add(n));
+      }
+      if (!frame) frame = requestAnimationFrame(flush);
+    });
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...ATTRS] });
+    return () => {
+      mo.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!on) {
+      setHover(null);
+      return;
+    }
+    const target = (e: MouseEvent | globalThis.MouseEvent) => {
+      const t = e.target as Element | null;
+      if (!t || t.closest(SKIP) || t.closest('input,select,textarea,label.button')) return null;
+      const node = textAt(e.clientX, e.clientY);
+      return node && !skipped(node.parentElement) ? node : null;
+    };
+    let frame = 0;
+    const move = (e: globalThis.MouseEvent) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const node = editing ? null : target(e);
+        setHover(node ? { rect: rectOf(node), changed: litMap.has(normText(originalOf(node))) } : null);
+      });
+    };
+    const click = (e: globalThis.MouseEvent) => {
+      if (e.altKey || editing) return;
+      const node = target(e);
+      if (!node) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const original = normText(originalOf(node));
+      editing = {
+        key: litKey(original),
+        fallback: original,
+        multiline: original.length > 80,
+        rect: rectOf(node),
+        hint: /\d/.test(original) ? 'Chữ có chứa số: chỉ thay ở những chỗ có đúng nguyên văn này.' : undefined,
+      };
+      setHover(null);
+      emit();
+    };
+    const leave = () => setHover(null);
+    document.addEventListener('mousemove', move, true);
+    document.addEventListener('click', click, true);
+    document.addEventListener('scroll', leave, true);
+    return () => {
+      document.removeEventListener('mousemove', move, true);
+      document.removeEventListener('click', click, true);
+      document.removeEventListener('scroll', leave, true);
+      cancelAnimationFrame(frame);
+    };
+  }, [on]);
+
+  if (!on || !hover) return null;
+  const r = hover.rect;
+  return createPortal(
+    <div className={hover.changed ? 'lit-hover changed' : 'lit-hover'} style={{ top: r.top - 2, left: r.left - 3, width: r.width + 6, height: r.height + 4 }} aria-hidden="true" />,
+    document.body,
   );
 }
