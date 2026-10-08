@@ -2,7 +2,7 @@
 // wrong arity, circular / forward reference). A flow with errors cannot be published.
 import { analyzeFormula, type ScopeInfo } from './formula/analyze';
 import { RESERVED_RUN, scopeFor, type FormulaSite } from './scopes';
-import { ID_PATTERN, type FlowConfig, type FormDef, type MasterTable } from './types';
+import { ID_PATTERN, ROW_FIELDS, type FlowConfig, type FormDef, type MasterTable } from './types';
 
 export interface ConfigError {
   path: string;
@@ -142,6 +142,22 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
       for (const k of ['deptColumn', 'costCenterColumn', 'sectorColumn'] as const)
         if (!cc.includes(agg[k])) err(`aggregation.${k}`, `Bảng "${agg.costCenterTable}" không có cột "${agg[k]}"`);
   }
+  // extra unit-table fields and group keys: valid, unique ids that do not hide a built-in row field
+  const extraIds = new Set<string>();
+  const extra = (list: 'unitFields' | 'groupBy', from: 'unit' | 'emp') =>
+    (agg[list] ?? []).forEach((f, i) => {
+      const p = `aggregation.${list}[${i}] (${f.id})`;
+      if (!f.id || !ID_PATTERN.test(f.id)) err(p, `Mã "${f.id}": chỉ gồm chữ không dấu, số, "_" và không bắt đầu bằng số`);
+      else if ((ROW_FIELDS as readonly string[]).includes(f.id)) err(p, `Mã "${f.id}" trùng field có sẵn row.${f.id} — đặt mã khác`);
+      else if (extraIds.has(f.id)) err(p, `Mã "${f.id}" bị trùng`);
+      extraIds.add(f.id);
+      if (!f.column) err(p, 'Chưa chọn cột');
+      else if (from === 'emp' && !empCols.includes(f.column)) err(p, `Cột "${f.column}" không có trong bảng nhân viên`);
+      else if (from === 'unit' && vctx.tables?.[agg.costCenterTable] && !vctx.tables[agg.costCenterTable].includes(f.column))
+        err(p, `Bảng "${agg.costCenterTable}" không có cột "${f.column}"`);
+    });
+  extra('unitFields', 'unit');
+  extra('groupBy', 'emp');
   check('aggregation.unitFilter', agg.unitFilter, at({ kind: 'unitFilter' }), false);
   if (!agg.descriptionTemplate) err('aggregation.descriptionTemplate', 'Thiếu mẫu diễn giải');
 
@@ -159,6 +175,19 @@ export function validateConfig(cfg: FlowConfig, vctx: ValidationContext): Config
       const col = f.columns.find((c) => c.id === feed.amountColumn);
       if (!col) err(`forms.${id}.ledgerFeed`, `Cột ghi vào ledger "${feed.amountColumn}" không có trong ${id}`);
       else if (col.type !== 'number') err(`forms.${id}.ledgerFeed`, `Cột ghi vào ledger "${feed.amountColumn}" phải là số`);
+      else if (f.adjust && (feed.sheet === 'accrual' || feed.sheet === 'both')) {
+        // the ledger takes "accrual this period"; the engine adds the adjustment itself
+        // (actual accrual = accrual + adjusted). A column that already includes it would count it twice.
+        const withAdj = new Set<string>();
+        for (const c of f.columns ?? [])
+          if (/\brow\.(adjusted|actualAccrual)\b/i.test(c.formula ?? '') || [...(c.formula ?? '').matchAll(/\[([^\]]+)\]/g)].some((m) => withAdj.has(m[1].trim())))
+            withAdj.add(c.id);
+        if (withAdj.has(col.id))
+          err(
+            `forms.${id}.ledgerFeed`,
+            `Cột ghi vào ledger "${col.id}" đã gồm số điều chỉnh kỳ trước — điều chỉnh sẽ bị cộng 2 lần. Chọn cột "số trích kỳ này" (chưa điều chỉnh).`,
+          );
+      }
     }
     if (!f.layout?.sheetName) err(`forms.${id}.layout`, 'Thiếu tên sheet');
     const L = f.layout;

@@ -95,8 +95,20 @@ export interface AggregationDef {
   sectorColumn: string;
   /** Formula in unit scope (row.unit, row.dept, CC("col") …); FALSE = unit excluded from this flow. */
   unitFilter?: string | null;
-  /** Placeholders: {prefix} {name} {nameEn} {period} {dept} {unit} {costCenter} {costCode} {helper} {budgetCode} {sector} */
+  /** Placeholders: {prefix} {name} {nameEn} {period} {dept} {unit} {costCenter} {costCode} {helper} {budgetCode} {sector}, and the ids below */
   descriptionTemplate: string;
+  /** More columns of the unit table, per unit: row.<id> in forms / unit filters, {id} in the description. */
+  unitFields?: AggField[];
+  /**
+   * Split the amounts further by these employee-table columns (row.<id>, {id}). Form rows are split;
+   * the ledger stays per unit × budget × cost center × cost code × helper (split rows are summed).
+   */
+  groupBy?: AggField[];
+}
+
+export interface AggField {
+  id: string;
+  column: string;
 }
 
 export interface FormColumn {
@@ -111,6 +123,10 @@ export interface FormColumn {
   /** Working column: computed (usable by later columns and checks) but never printed. */
   hidden?: boolean;
   width?: number;
+  /** Print: horizontal alignment of the data cells (default: numbers right, text left). */
+  align?: 'left' | 'center' | 'right';
+  /** Print: wrap long text in the data cells (default: description columns only). */
+  wrap?: boolean;
 }
 
 export interface SignatureRole {
@@ -147,6 +163,38 @@ export interface FormLayout {
   /** Total row above the header rows (top) or under the data (bottom, default). */
   totalPosition?: 'top' | 'bottom';
   totalLabel?: string;
+  /** Print formatting (fonts, colours, borders, page). Every property is optional. */
+  style?: FormStyle;
+}
+
+export interface FormStyle {
+  /** Font of the whole sheet (default Calibri). */
+  fontName?: string;
+  /** Size of the table, lines and signatures (default 11). */
+  fontSize?: number;
+  /** Size of the Vietnamese title (default 14); the English title is 2 smaller. */
+  titleSize?: number;
+  /** Header rows fill, hex RRGGBB (default E7EEF7); "" = no fill. */
+  headerFill?: string;
+  /** Header text colour, hex RRGGBB (default black). */
+  headerColor?: string;
+  /** Table borders (default thin). */
+  border?: 'thin' | 'medium' | 'hair' | 'none';
+  /** Number format of number cells (default #,##0). */
+  numFmt?: string;
+  /** Height of the data rows in points; empty = automatic. */
+  rowHeight?: number;
+  /** Height of the two header rows in points (default 32 / 30). */
+  headerHeight?: number;
+  /** Total row bold (default true). */
+  totalBold?: boolean;
+  paperSize?: 'A4' | 'A3';
+  /** Page margins (default normal). */
+  margins?: 'narrow' | 'normal' | 'wide';
+  /** Fit all columns on one page width (default true). */
+  fitWidth?: boolean;
+  /** Show Excel grid lines on screen (default false). */
+  gridLines?: boolean;
 }
 
 /** "both": the amount goes to the accrual sheet AND, the same amount, to the actual sheet (actual = accrual). */

@@ -75,6 +75,8 @@ export interface AggRow {
   actualAccrual: number;
   accrue: boolean;
   pay: boolean;
+  /** unit-table fields and extra group keys of the aggregation (row.<id>) */
+  extra: Record<string, Scalar>;
 }
 
 export interface FormRowOut {
@@ -395,6 +397,7 @@ export function runFlow(ctx: RunContext): RunResult {
       costCenter: str(r?.[agg.costCenterColumn]),
       sector: str(r?.[agg.sectorColumn]),
     };
+    for (const f of agg.unitFields ?? []) fields[f.id] = r?.[f.column] ?? null;
     return {
       column: () => {
         throw new FormulaError('Không dùng [cột] trong bộ lọc đơn vị');
@@ -500,7 +503,10 @@ export function runFlow(ctx: RunContext): RunResult {
         const c = str(e.values[ci.costCenterColumn]);
         if (c) costCenter = c;
       }
-      const gk = [un, normKey(budget), normKey(costCenter), normKey(helper)].join('|');
+      const extra: Record<string, Scalar> = {};
+      for (const f of agg.unitFields ?? []) extra[f.id] = ccRow[f.column] ?? null;
+      for (const f of agg.groupBy ?? []) extra[f.id] = e.values[f.column] ?? null;
+      const gk = [un, normKey(budget), normKey(costCenter), normKey(helper), ...(agg.groupBy ?? []).map((f) => normKey(extra[f.id]))].join('|');
       let g = groups.get(gk);
       if (!g) {
         g = {
@@ -524,6 +530,7 @@ export function runFlow(ctx: RunContext): RunResult {
           actualAccrual: 0,
           accrue: item.accrue,
           pay: item.pay,
+          extra,
         };
         groups.set(gk, g);
       }
@@ -541,10 +548,22 @@ export function runFlow(ctx: RunContext): RunResult {
     const y = b.toUpperCase();
     return x < y ? -1 : x > y ? 1 : 0;
   };
+  const extraCmp = (a: AggRow, b: AggRow) => {
+    for (const f of agg.groupBy ?? []) {
+      const c = cmp(str(a.extra[f.id]), str(b.extra[f.id]));
+      if (c) return c;
+    }
+    return 0;
+  };
   const sortAgg = (rows: AggRow[]) =>
     rows.sort(
       (a, b) =>
-        cmp(a.dept, b.dept) || cmp(a.unit, b.unit) || cmp(a.costCenter, b.costCenter) || cmp(a.budgetCode, b.budgetCode) || cmp(a.helper, b.helper),
+        cmp(a.dept, b.dept) ||
+        cmp(a.unit, b.unit) ||
+        cmp(a.costCenter, b.costCenter) ||
+        cmp(a.budgetCode, b.budgetCode) ||
+        cmp(a.helper, b.helper) ||
+        extraCmp(a, b),
     );
   const aggRows = sortAgg(
     [...groups.values()].map((g) => {
@@ -579,6 +598,8 @@ export function runFlow(ctx: RunContext): RunResult {
         const present = new Set<string>();
         for (const r of cands) {
           const k = ledgerKey(r);
+          // rows split by extra group keys share one ledger key: the balance goes on the first one
+          if (present.has(k)) continue;
           present.add(k);
           if (!accruedHelpers.has(normKey(r.helper)) && !r.accrue) continue;
           r.adjusted = bal.get(k)?.amount ?? 0;
@@ -614,6 +635,10 @@ export function runFlow(ctx: RunContext): RunResult {
             actualAccrual: b.amount,
             accrue: true,
             pay: item.pay,
+            extra: Object.fromEntries([
+              ...(agg.unitFields ?? []).map((f) => [f.id, ccRow ? (ccRow[f.column] ?? null) : null]),
+              ...(agg.groupBy ?? []).map((f) => [f.id, null]),
+            ]),
           });
         }
         sortAgg(cands);
@@ -622,6 +647,7 @@ export function runFlow(ctx: RunContext): RunResult {
 
     for (const r of cands)
       r.description = fillTemplate(agg.descriptionTemplate, {
+        ...r.extra,
         prefix: def.prefix,
         name: r.name,
         nameEn: r.nameEn,
@@ -699,6 +725,30 @@ export function runFlow(ctx: RunContext): RunResult {
     // ledger feed
     const feed = def.ledgerFeed;
     if (feed && feed.sheet !== 'none') {
+      // rows split by extra group keys are summed back to one ledger line per key
+      const accIdx = new Map<string, LedgerAccrualRow>();
+      const actIdx = new Map<string, LedgerActualRow>();
+      const pushAccrual = (x: LedgerAccrualRow) => {
+        const k = ledgerKey(x);
+        const prev = accIdx.get(k);
+        if (prev) {
+          prev.accrual += x.accrual;
+          prev.adjusted += x.adjusted;
+          prev.actualAccrual += x.actualAccrual;
+        } else {
+          accIdx.set(k, x);
+          ledgerAccrual.push(x);
+        }
+      };
+      const pushActual = (x: LedgerActualRow) => {
+        const k = ledgerKey(x);
+        const prev = actIdx.get(k);
+        if (prev) prev.amount += x.amount;
+        else {
+          actIdx.set(k, x);
+          ledgerActual.push(x);
+        }
+      };
       for (const e of envs) {
         const base = {
           period,
@@ -714,12 +764,12 @@ export function runFlow(ctx: RunContext): RunResult {
         const amt = excelRound(toNum(e.values[feed.amountColumn] ?? null), 0);
         if (feed.sheet === 'both') {
           // paid exactly as accrued (actual = accrual): the balance of the key stays 0
-          ledgerAccrual.push({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
-          ledgerActual.push({ ...base, amount: amt + e.row.adjusted });
+          pushAccrual({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
+          pushActual({ ...base, amount: amt + e.row.adjusted });
         } else if (feed.sheet === 'accrual') {
           if (!e.row.accrue) continue;
-          ledgerAccrual.push({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
-        } else ledgerActual.push({ ...base, amount: amt });
+          pushAccrual({ ...base, accrual: amt, adjusted: e.row.adjusted, actualAccrual: amt + e.row.adjusted });
+        } else pushActual({ ...base, amount: amt });
       }
     }
 
@@ -727,7 +777,8 @@ export function runFlow(ctx: RunContext): RunResult {
   };
 
   const rowField = (r: AggRow, f: string): Scalar => {
-    if (!(f in r)) throw new FormulaError(`row.${f}: không có field này`);
+    if (f in r.extra) return r.extra[f];
+    if (!(f in r) || f === 'extra') throw new FormulaError(`row.${f}: không có field này`);
     return (r as unknown as Record<string, Scalar>)[f];
   };
   const rowOnlyEnv = (r: AggRow): Env => ({

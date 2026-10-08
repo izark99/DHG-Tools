@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import type { FormOut, RunResult } from '../engine/run';
 import type { FlowConfig, FormColumn, Scalar } from '../engine/types';
 import { fillTemplate, runVars } from '../engine/util';
+import { cellAlign, cellWrap, MARGINS, resolveStyle } from './formStyle';
 
 const thin: Partial<ExcelJS.Borders> = {
   top: { style: 'thin' },
@@ -21,17 +22,24 @@ export function colWidth(c: FormColumn): number {
 function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, Scalar>, testMode: boolean) {
   const def = form.def;
   const L = form.layout ?? def.layout;
+  const S = resolveStyle(L.style ?? def.layout.style);
   const ws = wb.addWorksheet((L.sheetName || form.id).slice(0, 31), {
     pageSetup: {
       orientation: L.orientation ?? 'landscape',
-      paperSize: 9,
-      fitToPage: true,
+      // 8 = A3 (Excel paper code; not in exceljs' enum)
+      paperSize: (S.paperSize === 'A3' ? 8 : 9) as unknown as ExcelJS.PaperSize,
+      fitToPage: S.fitWidth,
       fitToWidth: 1,
       fitToHeight: 0,
       horizontalCentered: true,
-      margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+      margins: { ...MARGINS[S.margins] },
     },
+    views: [{ showGridLines: S.gridLines }],
   });
+  // every font of the sheet: the chosen face and size, plus bold / italic / colour where needed
+  const font = (f: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: S.fontName, size: S.fontSize, ...f });
+  const edge: Partial<ExcelJS.Borders> =
+    S.border === 'none' ? {} : { top: { style: S.border }, left: { style: S.border }, bottom: { style: S.border }, right: { style: S.border } };
   const cols = def.columns;
   const n = cols.length;
   cols.forEach((c, i) => {
@@ -55,19 +63,19 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
   };
   if (L.companyName) {
     ws.getCell(r, 1).value = fill(L.companyName);
-    ws.getCell(r, 1).font = { bold: true };
+    ws.getCell(r, 1).font = font({ bold: true });
     r++;
   }
   for (const pre of L.preLines ?? []) {
     const t = fill(pre);
-    if (t) line(t, { bold: true }, 'left');
+    if (t) line(t, font({ bold: true }), 'left');
   }
-  if (testMode) line('BẢN CHẠY THỬ (TEST) — KHÔNG GỬI KẾ TOÁN', { bold: true, color: { argb: 'FFC00000' } });
-  line(fill(L.titleVi), { bold: true, size: 14 });
-  if (L.titleEn) line(fill(L.titleEn), { italic: true, size: 12 });
+  if (testMode) line('BẢN CHẠY THỬ (TEST) — KHÔNG GỬI KẾ TOÁN', font({ bold: true, color: { argb: 'FFC00000' } }));
+  line(fill(L.titleVi), font({ bold: true, size: S.titleSize }));
+  if (L.titleEn) line(fill(L.titleEn), font({ italic: true, size: Math.max(6, S.titleSize - 2) }));
   for (const extra of L.extraLines ?? []) {
     const t = fill(extra);
-    if (t) line(t, { bold: true }, 'left');
+    if (t) line(t, font({ bold: true }), 'left');
   }
   const totalTop = L.totalPosition === 'top';
   const totalRowTop = totalTop ? r : -1;
@@ -76,21 +84,18 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
   const hdrVi = r;
   const hdrEn = r + 1;
   cols.forEach((c, i) => {
-    const a = ws.getCell(hdrVi, i + 1);
-    a.value = c.headerVi;
-    a.font = { bold: true };
-    a.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    a.border = thin;
-    a.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7EEF7' } };
-    const b = ws.getCell(hdrEn, i + 1);
-    b.value = c.headerEn;
-    b.font = { italic: true };
-    b.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    b.border = thin;
-    b.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7EEF7' } };
+    const head = (cell: ExcelJS.Cell, value: string, f: Partial<ExcelJS.Font>) => {
+      cell.value = value;
+      cell.font = font({ ...f, color: { argb: `FF${S.headerColor}` } });
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = edge;
+      if (S.headerFill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${S.headerFill}` } };
+    };
+    head(ws.getCell(hdrVi, i + 1), c.headerVi, { bold: true });
+    head(ws.getCell(hdrEn, i + 1), c.headerEn, { italic: true });
   });
-  ws.getRow(hdrVi).height = 32;
-  ws.getRow(hdrEn).height = 30;
+  ws.getRow(hdrVi).height = S.headerHeight ?? 32;
+  ws.getRow(hdrEn).height = S.headerHeight ?? 30;
   ws.pageSetup.printTitlesRow = `${hdrVi}:${hdrEn}`;
   r = hdrEn + 1;
 
@@ -100,10 +105,12 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
       const cell = ws.getCell(r, i + 1);
       const v = fr.values[c.id];
       cell.value = v === null || v === undefined ? null : c.type === 'number' ? Number(v) : String(v);
-      cell.border = thin;
-      if (c.type === 'number') cell.numFmt = NUM;
-      else cell.alignment = { wrapText: /desc/i.test(c.id), vertical: 'middle' };
+      cell.border = edge;
+      cell.font = font();
+      if (c.type === 'number') cell.numFmt = S.numFmt;
+      cell.alignment = { horizontal: cellAlign(c), wrapText: cellWrap(c), vertical: 'middle' };
     });
+    if (S.rowHeight) ws.getRow(r).height = S.rowHeight;
     r++;
   }
   const lastData = r - 1;
@@ -113,12 +120,13 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
   const labelCol = cols.findIndex((c) => c.type === 'text') + 1 || 1;
   cols.forEach((c, i) => {
     const cell = ws.getCell(totalRow, i + 1);
-    cell.border = thin;
-    cell.font = { bold: true };
+    cell.border = edge;
+    cell.font = font({ bold: S.totalBold });
     if (c.type === 'number' && c.total !== false) {
       const L1 = ws.getColumn(i + 1).letter;
       cell.value = form.rows.length ? { formula: `SUM(${L1}${firstData}:${L1}${lastData})`, result: form.totals[c.id] ?? 0 } : 0;
-      cell.numFmt = NUM;
+      cell.numFmt = S.numFmt;
+      cell.alignment = { horizontal: cellAlign(c), vertical: 'middle' };
     }
   });
   ws.getCell(totalRow, labelCol).value = L.totalLabel || 'Tổng cộng / Total';
@@ -131,11 +139,11 @@ function addFormSheet(wb: ExcelJS.Workbook, form: FormOut, vars: Record<string, 
     const to = visibleIdx[Math.max(Math.floor((k + 1) * per) - 1, Math.floor(k * per))] ?? from;
     return [from, to] as const;
   };
-  const put = (row: number, from: number, to: number, text: string, font: Partial<ExcelJS.Font>, align: ExcelJS.Alignment['horizontal'] = 'center') => {
+  const put = (row: number, from: number, to: number, text: string, f: Partial<ExcelJS.Font>, align: ExcelJS.Alignment['horizontal'] = 'center') => {
     if (to > from) ws.mergeCells(row, from, row, to);
     const c = ws.getCell(row, from);
     c.value = text;
-    c.font = font;
+    c.font = { name: S.fontName, size: S.fontSize, ...f };
     c.alignment = { horizontal: align, wrapText: false };
   };
   const signatureRow = (roles: FormOut['layout']['signatures']) => {

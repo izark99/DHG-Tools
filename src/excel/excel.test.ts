@@ -44,6 +44,34 @@ describe('Form workbook', () => {
   });
 });
 
+describe('Form print style', () => {
+  it('applies font, sizes, header colours, borders, number format, page and column alignment', async () => {
+    const c = config();
+    c.forms.form02.layout.style = { fontName: 'Times New Roman', fontSize: 12, titleSize: 16, headerFill: 'FFF2CC', border: 'medium', numFmt: '#,##0;(#,##0)', rowHeight: 20, paperSize: 'A3', margins: 'narrow', totalBold: false };
+    c.forms.form02.columns[1] = { ...c.forms.form02.columns[1], align: 'center', wrap: true };
+    const res = runFlow({ config: c, masters, inputs: parsed(c, EMPS), run: { month: 9, year: 2026, preparer: 'X' }, ledger: emptyLedger() });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await writeForms(c, res)).buffer);
+    const ws = wb.getWorksheet('Form 02')!;
+    expect(ws.getCell('A2').font).toMatchObject({ name: 'Times New Roman', size: 16, bold: true });
+    expect(ws.getCell('A3').font).toMatchObject({ size: 14, italic: true });
+    expect(ws.getCell(5, 3).fill).toMatchObject({ fgColor: { argb: 'FFFFF2CC' } });
+    expect(ws.getCell(7, 3).font).toMatchObject({ name: 'Times New Roman', size: 12 });
+    expect(ws.getCell(7, 3).numFmt).toBe('#,##0;(#,##0)');
+    expect(ws.getCell(7, 3).border?.top?.style).toBe('medium');
+    expect(ws.getCell(7, 2).alignment).toMatchObject({ horizontal: 'center', wrapText: true });
+    expect(ws.getRow(7).height).toBe(20);
+    expect(ws.getCell(14, 3).font?.bold).toBeFalsy();
+    expect(ws.pageSetup.paperSize).toBe(8);
+    expect(ws.pageSetup.margins?.left).toBe(0.25);
+    // Form 03 has no style: defaults
+    const f3 = wb.getWorksheet('Form 03')!;
+    expect(f3.getCell(5, 3).fill).toMatchObject({ fgColor: { argb: 'FFE7EEF7' } });
+    expect(f3.getCell(7, 3).numFmt).toBe('#,##0');
+    expect(f3.getCell(5, 3).font?.bold).toBe(true);
+  });
+});
+
 describe('Ledger workbook', () => {
   it('round-trips with a stable hash and detects edits', async () => {
     const ledger = result.ledgerOut!;

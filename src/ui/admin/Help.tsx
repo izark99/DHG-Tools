@@ -188,7 +188,8 @@ const SECTIONS: Section[] = [
       <>
         <p>
           <Path>Quản trị › Flows</Path>: danh sách flow, phiên bản đang dùng, bản nháp, và ô <i>hiện cho người dùng</i> (bỏ chọn để ẩn flow khỏi trang chạy).
-          Tạo flow mới từ cấu hình trống, <b>sao chép từ một flow có sẵn</b> (hợp khi flow mới gần giống flow cũ), hoặc từ file JSON.
+          Tạo flow mới từ cấu hình trống, <b>sao chép từ một flow có sẵn</b> (hợp khi flow mới gần giống flow cũ), hoặc từ file JSON. Nút <b>Xoá</b> xoá flow cùng mọi phiên bản (phải gõ lại mã
+          flow; nhật ký chạy vẫn giữ). Chỉ muốn người dùng không thấy nữa thì bỏ chọn <i>hiện cho người dùng</i>.
         </p>
         <h3>Bắt đầu nhanh từ file lương mẫu</h3>
         <p>
@@ -240,13 +241,19 @@ const SECTIONS: Section[] = [
             </tr>
             <tr>
               <td>6. Gộp theo đơn vị</td>
-              <td>Bảng đơn vị, cột Dept / Cost Center / Sector, câu diễn giải. Có dữ liệu mẫu thì xem ngay các dòng sau khi gộp.</td>
+              <td>
+                Bảng đơn vị, cột Dept / Cost Center / Sector, câu diễn giải. <b>Lấy thêm cột từ bảng đơn vị</b>: bao nhiêu cột cũng được, dùng row.&lt;mã&gt; và{' '}
+                {'{mã}'}. <b>Tách dòng thêm theo cột của bảng nhân viên</b> (dự án, chức danh…): mỗi giá trị thành một dòng trên Form; ledger vẫn theo Đơn vị × Budget ×
+                Cost Center × Cost Code × Helper (các dòng tách được cộng lại). Có dữ liệu mẫu thì xem ngay các dòng sau khi gộp.
+              </td>
             </tr>
             <tr>
               <td>7–8. Form 02 / Form 03</td>
               <td>
                 Bật / tắt, <b>đợt chạy</b> (Trích / Chi), điều chỉnh theo ledger, <b>ghi vào ledger</b>; <b>Xem trước bản in</b> giống file Excel (bấm tiêu đề cột trên bản
-                xem trước để tới cột đó); phần <i>Cột &amp; công thức</i> và <i>Tiêu đề &amp; chữ ký</i>.
+                xem trước để tới cột đó); phần <i>Cột &amp; công thức</i>, <i>Tiêu đề &amp; chữ ký</i> và <b>Định dạng in</b> (font, cỡ chữ, cỡ tiêu đề, màu tiêu đề
+                cột, viền, định dạng số, chiều cao dòng, khổ giấy, lề). Căn lề / xuống dòng từng cột: bấm ▸ ở dòng của cột. Cột ghi vào ledger của Form 02 phải là{' '}
+                <i>số trích kỳ này</i> (chưa điều chỉnh) — chọn cột đã gồm điều chỉnh sẽ báo lỗi để tránh cộng 2 lần.
               </td>
             </tr>
             <tr>

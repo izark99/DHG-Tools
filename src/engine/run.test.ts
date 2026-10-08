@@ -225,3 +225,66 @@ describe('accrual and payment as two runs of the same period', () => {
     expect(next.form02!.rows.every((x) => x.row.adjusted === 0)).toBe(true);
   });
 });
+
+describe('aggregation: extra unit-table fields and extra group keys', () => {
+  const base = config();
+  const cfg = config({
+    aggregation: {
+      ...base.aggregation,
+      unitFields: [{ id: 'hrCode', column: 'HR' }],
+      groupBy: [{ id: 'grp', column: 'emp_id' }],
+      descriptionTemplate: '{prefix} {name}_{hrCode}_{grp}',
+    },
+  });
+  const r = runFlow({ config: cfg, masters, inputs: parsed(cfg, EMPS), run: { month: 9, year: 2026, preparer: 'X' }, ledger: emptyLedger() });
+
+  it('is valid and splits the rows by the extra key', () => {
+    expect(validateConfig(cfg, contextFromMasters(masters))).toEqual([]);
+    const lt = r.form02!.rows.filter((x) => x.row.helper === '0301_LT' && x.row.unit === 'U1');
+    expect(lt.map((x) => [x.row.extra.grp, x.row.amount, x.row.description])).toEqual([
+      ['0022', 10_000_000, 'Trích Lương thời gian_HR100_0022'],
+      ['0101', 8_000_000, 'Trích Lương thời gian_HR100_0101'],
+    ]);
+  });
+
+  it('keeps one ledger line per key (split rows summed)', () => {
+    const acc = r.ledgerOut!.accrual.filter((x) => x.helper === '0301_LT' && x.unit === 'U1');
+    expect(acc.map((x) => x.accrual)).toEqual([18_000_000]);
+  });
+
+  it('rejects ids that hide a built-in field, and unknown columns', () => {
+    const bad = config({ aggregation: { ...base.aggregation, unitFields: [{ id: 'unit', column: 'HR' }], groupBy: [{ id: 'g', column: 'nope' }] } });
+    const msgs = validateConfig(bad, contextFromMasters(masters)).map((e) => e.message);
+    expect(msgs.some((m) => /trùng field có sẵn/.test(m))).toBe(true);
+    expect(msgs.some((m) => /"nope" không có trong bảng nhân viên/.test(m))).toBe(true);
+  });
+});
+
+describe('adjustment sign and ledger amount column', () => {
+  it('payable this period = accrual this period + adjustment from the ledger', () => {
+    // accrued 100 and paid 90 last period: over-accrued by 10 → adjustment −10 → payable 90
+    const cfg = config();
+    const r = runFlow({
+      config: cfg,
+      masters,
+      inputs: parsed(cfg, EMPS),
+      run: { month: 10, year: 2026, preparer: 'X' },
+      ledger: {
+        accrual: [{ period: '2026-09', flow: 'T1', sector: 'DHG', dept: 'D1', unit: 'U1', budgetCode: 'HR100', costCenter: 'CC1', costCode: '0301', helper: '0301_LT', accrual: 100, adjusted: 0, actualAccrual: 100 }],
+        actual: [{ period: '2026-09', flow: 'T1', sector: 'DHG', dept: 'D1', unit: 'U1', budgetCode: 'HR100', costCenter: 'CC1', costCode: '0301', helper: '0301_LT', amount: 90 }],
+        meta: null,
+      },
+    });
+    const row = r.form02!.rows.find((x) => x.row.unit === 'U1' && x.row.helper === '0301_LT')!;
+    expect([row.values.accrual, row.values.adj, row.values.actual]).toEqual([18_000_000, -10, 17_999_990]);
+    // the ledger keeps accrual this period; actual accrual = accrual + adjusted
+    const l = r.ledgerOut!.accrual.find((x) => x.period === '2026-10' && x.unit === 'U1' && x.helper === '0301_LT')!;
+    expect([l.accrual, l.adjusted, l.actualAccrual]).toEqual([18_000_000, -10, 17_999_990]);
+  });
+
+  it('refuses a ledger column that already includes the adjustment', () => {
+    const cfg = config();
+    cfg.forms.form02.ledgerFeed = { sheet: 'accrual', amountColumn: 'actual' };
+    expect(validateConfig(cfg, contextFromMasters(masters)).map((e) => e.message).join()).toMatch(/cộng 2 lần/);
+  });
+});
