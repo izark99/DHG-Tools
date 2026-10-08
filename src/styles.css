@@ -437,7 +437,16 @@ button.link:hover:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px 16px;
-  align-items: end;
+  /* fields line up by their caption; a help text under one field never pushes the others */
+  align-items: start;
+}
+/* a checkbox or a button in a grid of captioned fields sits level with the inputs */
+.form-grid > label.check {
+  margin-top: 21px;
+  min-height: var(--h-control);
+}
+.form-grid > .form-actions {
+  align-self: end;
 }
 /* a button (or a row of buttons) right after a grid of fields gets breathing room */
 .form-grid + button,
@@ -1880,6 +1889,20 @@ button.guide-add.active {
   display: flex;
   align-items: flex-end;
 }
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.color-field input[type='color'],
+.form-grid > label > input[type='color'] {
+  width: 56px;
+  height: var(--h-control);
+  padding: 2px;
+}
+.fp-table td {
+  font-variant-numeric: tabular-nums;
+}
 .lit-hover {
   position: fixed;
   z-index: 60;
@@ -2952,6 +2975,7 @@ table.grid td.ta-center {
   margin-bottom: 8px;
 }
 .fp-paper {
+  position: relative;
   overflow-x: auto;
   padding: 20px 24px 28px;
   background: #ffffff;
@@ -2959,9 +2983,18 @@ table.grid td.ta-center {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-light);
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 12px;
   line-height: 1.35;
+}
+.fp-paper-meta {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-family: Inter, sans-serif;
+  font-size: 11px;
+  color: #999;
+}
+.fp-red {
+  color: #c00000;
 }
 .fp-company,
 .fp-pre {
@@ -2971,12 +3004,10 @@ table.grid td.ta-center {
   margin-top: 6px;
   text-align: center;
   font-weight: 700;
-  font-size: 15px;
 }
 .fp-title-en {
   text-align: center;
   font-style: italic;
-  font-size: 13px;
   margin-bottom: 4px;
 }
 .fp-table {
@@ -2987,7 +3018,6 @@ table.grid td.ta-center {
 }
 .fp-table th,
 .fp-table td {
-  border: 1px solid #555;
   padding: 2px 4px;
   overflow: hidden;
   text-overflow: ellipsis;

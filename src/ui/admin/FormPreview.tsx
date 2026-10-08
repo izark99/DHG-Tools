@@ -4,6 +4,7 @@
 import type { FormOut } from '../../engine/run';
 import type { FormDef, Scalar, SignatureRole } from '../../engine/types';
 import { fillTemplate, runVars } from '../../engine/util';
+import { cellAlign, cellWrap, formatNum, resolveStyle } from '../../excel/formStyle';
 import { colWidth } from '../../excel/writeForms';
 import { fmt } from '../common';
 
@@ -11,6 +12,23 @@ const MAX_ROWS = 25;
 
 export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: FormOut | null; run?: Record<string, Scalar>; onColumn?: (index: number) => void }) {
   const L = out?.layout ?? def.layout;
+  // style from the definition being edited, so a change shows before the sample is re-run
+  const S = resolveStyle(def.layout.style);
+  const px = (pt: number) => `${Math.round((pt * 4) / 3)}px`;
+  const line = S.border === 'none' ? 'none' : S.border === 'medium' ? '2px solid #333' : S.border === 'hair' ? '1px dotted #555' : '1px solid #555';
+  const cellStyle = { border: line } as const;
+  const headStyle = { border: line, background: S.headerFill ? `#${S.headerFill}` : 'transparent', color: `#${S.headerColor}`, height: S.headerHeight ? px(S.headerHeight) : undefined };
+  const dataStyle = (c: FormDef['columns'][number]) => ({
+    ...cellStyle,
+    textAlign: cellAlign(c),
+    whiteSpace: cellWrap(c) ? ('normal' as const) : ('nowrap' as const),
+    height: S.rowHeight ? px(S.rowHeight) : undefined,
+  });
+  const num = (v: Scalar | undefined) => {
+    if (typeof v !== 'number') return <>{fmt(v ?? null)}</>;
+    const f = formatNum(v, S.numFmt);
+    return f.red ? <span className="fp-red">{f.text}</span> : <>{f.text}</>;
+  };
   const vars = out && run ? runVars(run) : {};
   const fill = (t: string | undefined) => (out ? fillTemplate(t ?? '', vars).trim() : (t ?? '').trim());
   const hidden = new Set(out ? out.hidden : def.columns.filter((c) => c.hidden).map((c) => c.id));
@@ -20,8 +38,8 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
   const totalRow = (
     <tr className="fp-total">
       {cols.map(({ c }, k) => (
-        <td key={c.id} className={c.type === 'number' ? 'num' : undefined}>
-          {k === (labelAt < 0 ? 0 : labelAt) ? L.totalLabel || 'Tổng cộng / Total' : c.type === 'number' && c.total !== false ? (out ? fmt(out.totals[c.id] ?? 0) : 'Σ') : ''}
+        <td key={c.id} style={{ ...cellStyle, textAlign: k === (labelAt < 0 ? 0 : labelAt) ? 'left' : cellAlign(c), fontWeight: S.totalBold ? 700 : 400 }}>
+          {k === (labelAt < 0 ? 0 : labelAt) ? L.totalLabel || 'Tổng cộng / Total' : c.type === 'number' && c.total !== false ? (out ? num(out.totals[c.id] ?? 0) : 'Σ') : ''}
         </td>
       ))}
     </tr>
@@ -42,11 +60,24 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
     );
   return (
     <div className="fp-wrap" data-no-text-edit="">
-      <div className={`fp-paper ${L.orientation === 'portrait' ? 'portrait' : 'landscape'}`}>
+      <div
+        className={`fp-paper ${L.orientation === 'portrait' ? 'portrait' : 'landscape'}`}
+        style={{ fontFamily: `"${S.fontName}", Calibri, Arial, sans-serif`, fontSize: px(S.fontSize), padding: S.margins === 'narrow' ? '14px 16px' : S.margins === 'wide' ? '36px 44px' : undefined }}
+      >
+        <div className="fp-paper-meta">
+          {S.paperSize} · {L.orientation === 'portrait' ? 'dọc' : 'ngang'}
+          {S.fitWidth ? ' · vừa 1 trang ngang' : ''}
+        </div>
         {L.companyName && <div className="fp-company">{fill(L.companyName)}</div>}
         {(L.preLines ?? []).map((t, k) => fill(t) && <div key={k} className="fp-pre">{fill(t)}</div>)}
-        <div className="fp-title">{fill(L.titleVi) || '(tiêu đề)'}</div>
-        {L.titleEn && <div className="fp-title-en">{fill(L.titleEn)}</div>}
+        <div className="fp-title" style={{ fontSize: px(S.titleSize) }}>
+          {fill(L.titleVi) || '(tiêu đề)'}
+        </div>
+        {L.titleEn && (
+          <div className="fp-title-en" style={{ fontSize: px(Math.max(6, S.titleSize - 2)) }}>
+            {fill(L.titleEn)}
+          </div>
+        )}
         {(L.extraLines ?? []).map((t, k) => fill(t) && <div key={k} className="fp-pre">{fill(t)}</div>)}
         <table className="fp-table">
           <colgroup>
@@ -58,14 +89,14 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
             {L.totalPosition === 'top' && totalRow}
             <tr>
               {cols.map(({ c, i }) => (
-                <th key={c.id} onClick={onColumn ? () => onColumn(i) : undefined} title={onColumn ? 'Bấm để sửa cột này' : undefined}>
+                <th key={c.id} style={headStyle} onClick={onColumn ? () => onColumn(i) : undefined} title={onColumn ? 'Bấm để sửa cột này' : undefined}>
                   {c.headerVi || <span className="muted">[{c.id}]</span>}
                 </th>
               ))}
             </tr>
             <tr className="fp-en">
               {cols.map(({ c, i }) => (
-                <th key={c.id} onClick={onColumn ? () => onColumn(i) : undefined}>
+                <th key={c.id} style={headStyle} onClick={onColumn ? () => onColumn(i) : undefined}>
                   {c.headerEn}
                 </th>
               ))}
@@ -76,8 +107,8 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
               ? rows.map((r, k) => (
                   <tr key={k}>
                     {cols.map(({ c }) => (
-                      <td key={c.id} className={c.type === 'number' ? 'num' : undefined}>
-                        {fmt(r.values[c.id] ?? null)}
+                      <td key={c.id} style={dataStyle(c)}>
+                        {c.type === 'number' ? num(r.values[c.id]) : fmt(r.values[c.id] ?? null)}
                       </td>
                     ))}
                   </tr>
@@ -85,8 +116,8 @@ export function FormPreview({ def, out, run, onColumn }: { def: FormDef; out: Fo
               : [0, 1, 2].map((k) => (
                   <tr key={k} className="fp-placeholder">
                     {cols.map(({ c }) => (
-                      <td key={c.id} className={c.type === 'number' ? 'num' : undefined}>
-                        {c.type === 'number' ? '0' : '…'}
+                      <td key={c.id} style={dataStyle(c)}>
+                        {c.type === 'number' ? num(0) : '…'}
                       </td>
                     ))}
                   </tr>

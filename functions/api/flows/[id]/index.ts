@@ -30,3 +30,14 @@ export const onRequestPatch: Handler = route(async ({ request, env, data, params
   if (typeof b.active === 'boolean') await env.DB.prepare('UPDATE flows SET active = ? WHERE id = ?').bind(b.active ? 1 : 0, id).run();
   return json({ ok: true });
 });
+
+// DELETE {confirm: "<id>"} (admin): the flow, its versions and draft. Run history is kept.
+export const onRequestDelete: Handler = route(async ({ request, env, data, params }) => {
+  requireAdmin(data);
+  const id = String(params.id);
+  const b = await body<{ confirm?: unknown }>(request, 1_000);
+  if (b.confirm !== id) return error(400, 'Gõ đúng mã flow để xác nhận xoá');
+  if (!(await env.DB.prepare('SELECT 1 FROM flows WHERE id = ?').bind(id).first())) return error(404, 'Không có flow này');
+  await env.DB.batch([env.DB.prepare('DELETE FROM flow_versions WHERE flow_id = ?').bind(id), env.DB.prepare('DELETE FROM flows WHERE id = ?').bind(id)]);
+  return json({ ok: true });
+});

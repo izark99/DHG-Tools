@@ -23,7 +23,9 @@ export function scopeFor(cfg: FlowConfig, vctx: ValidationContext, site: Formula
   const base = { inputs, params: vctx.params, run, tables: vctx.tables };
   const empCols = (cfg.employeeTable?.columns ?? []).map((c) => c.id);
   const formCols = (f: 'form02' | 'form03') => (cfg.forms?.[f]?.columns ?? []).map((c) => c.id);
-  const rowInfo = { ...base, rowFields: [...ROW_FIELDS], empColumns: empCols };
+  const unitExtra = (cfg.aggregation?.unitFields ?? []).map((f) => f.id);
+  const groupExtra = (cfg.aggregation?.groupBy ?? []).map((f) => f.id);
+  const rowInfo = { ...base, rowFields: [...ROW_FIELDS, ...unitExtra, ...groupExtra], empColumns: empCols };
   const totalInfo = (): ScopeInfo => ({ ...base, scope: 'total', columns: [], empColumns: empCols, formColumns: { f02: formCols('form02'), f03: formCols('form03') } });
 
   switch (site.kind) {
@@ -32,7 +34,7 @@ export function scopeFor(cfg: FlowConfig, vctx: ValidationContext, site: Formula
     case 'employeeFilter':
       return { ...base, scope: 'employee', columns: empCols, allColumns: empCols };
     case 'unitFilter':
-      return { ...base, scope: 'unit', columns: [], rowFields: [...UNIT_FIELDS] };
+      return { ...base, scope: 'unit', columns: [], rowFields: [...UNIT_FIELDS, ...unitExtra] };
     case 'formRowFilter':
       return { ...rowInfo, scope: 'form', columns: [] };
     case 'formColumn': {

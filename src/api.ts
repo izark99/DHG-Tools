@@ -133,6 +133,7 @@ export const api = {
     ),
   flowVersionAction: (id: string, v: number, action: 'cancel' | 'restore') => call<{ ok: true; versions: VersionInfo[] }>('POST', `/api/flows/${enc(id)}/versions/${v}`, { action }),
   createFlow: (id: string, name: string, config: FlowConfig) => call('POST', '/api/flows', { id, name, config }),
+  deleteFlow: (id: string) => call<{ ok: true }>('DELETE', `/api/flows/${enc(id)}`, { confirm: id }),
   patchFlow: (id: string, patch: { name?: string; sort?: number; active?: boolean }) => call('PATCH', `/api/flows/${enc(id)}`, patch),
   saveDraft: (id: string, config: FlowConfig) => call<{ ok: true; errors: ConfigError[] }>('PUT', `/api/flows/${enc(id)}/draft`, { config }),
   deleteDraft: (id: string) => call('DELETE', `/api/flows/${enc(id)}/draft`),

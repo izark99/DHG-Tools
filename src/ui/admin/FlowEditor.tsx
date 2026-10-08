@@ -7,7 +7,7 @@ import { periodLabel } from '../../engine/effective';
 import { scopeFor, type FormulaSite } from '../../engine/scopes';
 import type { FormOut } from '../../engine/run';
 import { normKey } from '../../engine/util';
-import { formPhase, type CheckDef, type CostItem, type EmployeeColumn, type ExtraSheetDef, type FlowConfig, type FooterBlock, type FormColumn, type FormDef, type FormPhase, type InputDef, type InputField, type MasterTable, type RunParamDef, type Scalar, type SignatureRole } from '../../engine/types';
+import { formPhase, type CheckDef, type CostItem, type EmployeeColumn, type ExtraSheetDef, type FlowConfig, type FooterBlock, type FormColumn, type FormDef, type FormPhase, type FormStyle, type InputDef, type InputField, type MasterTable, type RunParamDef, type AggField, type Scalar, type SignatureRole } from '../../engine/types';
 import { contextFromMasters, validateConfig, type ConfigError } from '../../engine/validate';
 import { Alert, DataTable, download, fmt, useAsync } from '../common';
 import { Card, Icon, PageHeader, toast } from '../layout';
@@ -19,6 +19,7 @@ import { GridEditor } from './GridEditor';
 import { Overview } from './Overview';
 import { SampleBar, SampleValue, sumBy, useSample } from './Sample';
 import { FormPreview } from './FormPreview';
+import { FONT_CHOICES, NUMFMT_CHOICES, resolveStyle } from '../../excel/formStyle';
 import { QuickStart } from './QuickStart';
 import { Versions } from './Versions';
 import { EffectiveDialog, range } from './Effective';
@@ -189,6 +190,8 @@ function Editor({
   const tableNames = masters.map((t) => t.name);
   const ccCols = masters.find((t) => t.name === cfg.aggregation.costCenterTable)?.columns ?? [];
   const runParamIds = cfg.runParams.map((p) => p.id);
+  const groupIds = (cfg.aggregation.groupBy ?? []).map((f) => f.id).filter(Boolean);
+  const aggExtra = [...(cfg.aggregation.unitFields ?? []).map((f) => f.id).filter(Boolean), ...groupIds];
   const errCount = (prefix: string | readonly string[]) => errors.filter((e) => (typeof prefix === 'string' ? [prefix] : prefix).some((p) => e.path.startsWith(p))).length;
 
   // ---- sample values ------------------------------------------------------
@@ -593,14 +596,61 @@ function Editor({
                 <label className="wide">
                   Câu diễn giải trên form
                   <input value={cfg.aggregation.descriptionTemplate} onChange={(e) => set({ aggregation: { ...cfg.aggregation, descriptionTemplate: e.target.value } })} />
-                  <small className="muted">Ghép từ: {'{prefix} {name} {nameEn} {period} {dept} {unit} {costCenter} {costCode} {helper} {budgetCode} {sector}'}. Ví dụ: {'{prefix} {name}_{period}_{dept}-{unit}'}</small>
+                  <small className="muted">
+                    Ghép từ: {'{prefix} {name} {nameEn} {period} {dept} {unit} {costCenter} {costCode} {helper} {budgetCode} {sector}'}
+                    {aggExtra.length > 0 && ` ${aggExtra.map((x) => `{${x}}`).join(' ')}`}. Ví dụ: {'{prefix} {name}_{period}_{dept}-{unit}'}
+                  </small>
                 </label>
                 <label className="wide">
                   Chỉ lấy một số đơn vị (tuỳ chọn; row.unit, row.dept, row.costCenter, row.sector, CC("cột"))
                   <FormulaInput optional value={cfg.aggregation.unitFilter} info={at({ kind: 'unitFilter' })} onChange={(v) => set({ aggregation: { ...cfg.aggregation, unitFilter: v || null } })} />
                 </label>
-                <p className="muted small wide">Tiền được gộp theo Đơn vị × Budget Code × Cost Center × Helper, làm tròn đến đồng; sắp xếp theo Dept, Unit, Cost Center, Budget Code, Helper.</p>
+                <p className="muted small wide">
+                  Tiền được gộp theo Đơn vị × Budget Code × Cost Center × Helper{groupIds.length > 0 && ` × ${groupIds.join(' × ')}`}, làm tròn đến đồng; sắp xếp theo Dept, Unit, Cost Center, Budget
+                  Code, Helper{groupIds.length > 0 && `, ${groupIds.join(', ')}`}.
+                </p>
               </div>
+
+              <h4>Lấy thêm cột từ bảng đơn vị</h4>
+              <p className="muted small">
+                Ngoài Dept / Cost Center / Sector, lấy thêm bất kỳ cột nào của bảng {cfg.aggregation.costCenterTable || 'đơn vị'} theo đơn vị của dòng. Dùng như row.&lt;mã&gt; trong cột Form, bộ lọc,
+                và {'{mã}'} trong câu diễn giải. Không làm tách dòng.
+              </p>
+              <GridEditor<AggField>
+                items={cfg.aggregation.unitFields ?? []}
+                onChange={(unitFields) => set({ aggregation: { ...cfg.aggregation, unitFields } })}
+                path="aggregation.unitFields"
+                errors={errors}
+                addLabel="Thêm cột từ bảng đơn vị"
+                empty="Chưa lấy thêm cột nào."
+                title={(f) => f.id}
+                make={() => ({ id: '', column: '' })}
+                fields={[
+                  { key: 'id', label: 'Mã (dùng row.mã, {mã})', short: 'Mã', kind: 'text', w: 200, placeholder: 'vd. region' },
+                  { key: 'column', label: 'Cột của bảng đơn vị', kind: 'select', options: ccCols },
+                ]}
+              />
+
+              <h4>Tách dòng thêm theo cột của bảng nhân viên</h4>
+              <p className="muted small">
+                Khi cần chia nhỏ hơn đơn vị — ví dụ theo dự án, chức danh, loại hợp đồng — thêm cột ở đây: mỗi giá trị khác nhau thành một dòng riêng trên Form. Dùng row.&lt;mã&gt; và{' '}
+                {'{mã}'} như trên. Ledger vẫn theo Đơn vị × Budget × Cost Center × Cost Code × Helper (các dòng tách được cộng lại).
+              </p>
+              <GridEditor<AggField>
+                items={cfg.aggregation.groupBy ?? []}
+                onChange={(groupBy) => set({ aggregation: { ...cfg.aggregation, groupBy } })}
+                path="aggregation.groupBy"
+                errors={errors}
+                addLabel="Thêm cột để tách dòng"
+                empty="Không tách thêm."
+                title={(f) => f.id}
+                make={() => ({ id: '', column: '' })}
+                fields={[
+                  { key: 'id', label: 'Mã (dùng row.mã, {mã})', short: 'Mã', kind: 'text', w: 200, placeholder: 'vd. project' },
+                  { key: 'column', label: 'Cột của bảng nhân viên', kind: 'select', options: empOpts },
+                ]}
+              />
+
               {r && (
                 <>
                   <h4>Kết quả gộp trên dữ liệu mẫu ({r.aggRows.length} dòng)</h4>
@@ -611,11 +661,12 @@ function Editor({
                       { id: 'costCenter', label: 'Cost center' },
                       { id: 'budgetCode', label: 'Budget' },
                       { id: 'helper', label: 'Helper' },
+                      ...aggExtra.map((x) => ({ id: x, label: x })),
                       { id: 'description', label: 'Diễn giải' },
                       { id: 'count', label: 'Số NV', numeric: true },
                       { id: 'amount', label: 'Số tiền', numeric: true },
                     ]}
-                    rows={r.aggRows as unknown as Record<string, Scalar>[]}
+                    rows={r.aggRows.map((a) => ({ ...a.extra, ...a }) as unknown as Record<string, Scalar>)}
                   />
                 </>
               )}
@@ -785,7 +836,11 @@ function FormEditor({
   const ferr = errors.filter((e) => e.path.startsWith(`forms.${id}.`) && !e.path.startsWith(`forms.${id}.columns`) && !e.path.startsWith(`forms.${id}.layout.signatures`));
   const [colFocus, setColFocus] = useState<number | null>(focus);
   useEffect(() => setColFocus(focus), [focus]);
-  const [part, setPart] = useState<'columns' | 'layout'>('columns');
+  const [part, setPart] = useState<'columns' | 'layout' | 'style'>('columns');
+  const st = L.style ?? {};
+  const setS = (p: Partial<FormStyle>) => setL({ style: { ...st, ...p } });
+  const R = resolveStyle(st);
+  const numIn = (v: string) => (v.trim() === '' ? undefined : Number(v));
   const name = id === 'form02' ? 'Form 02' : 'Form 03';
   const paramOpts = runParamIds.map((p) => ({ value: p, label: `{${p}}` }));
   return (
@@ -846,7 +901,114 @@ function FormEditor({
         <button type="button" className={part === 'layout' ? 'on' : undefined} aria-pressed={part === 'layout'} onClick={() => setPart('layout')}>
           Tiêu đề &amp; chữ ký
         </button>
+        <button type="button" className={part === 'style' ? 'on' : undefined} aria-pressed={part === 'style'} onClick={() => setPart('style')}>
+          Định dạng in
+        </button>
       </div>
+
+      {part === 'style' && (
+        <>
+          <p className="muted small">Áp dụng cho file Excel xuất ra. Bản xem trước phía trên đổi ngay theo. Để trống = mặc định.</p>
+          <div className="card form-grid">
+            <label>
+              Font chữ
+              <input list="fp-fonts" value={st.fontName ?? ''} placeholder={R.fontName} onChange={(e) => setS({ fontName: e.target.value || undefined })} />
+              <datalist id="fp-fonts">
+                {FONT_CHOICES.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </label>
+            <label>
+              Cỡ chữ bảng, chữ ký
+              <input type="number" min={6} max={36} value={st.fontSize ?? ''} placeholder={String(R.fontSize)} onChange={(e) => setS({ fontSize: numIn(e.target.value) })} />
+            </label>
+            <label>
+              Cỡ chữ tiêu đề
+              <input type="number" min={6} max={48} value={st.titleSize ?? ''} placeholder={String(R.titleSize)} onChange={(e) => setS({ titleSize: numIn(e.target.value) })} />
+              <small className="muted">Tiêu đề tiếng Anh nhỏ hơn 2.</small>
+            </label>
+            <label>
+              Định dạng số
+              <select value={R.numFmt} onChange={(e) => setS({ numFmt: e.target.value })}>
+                {!NUMFMT_CHOICES.some((x) => x.value === R.numFmt) && <option value={R.numFmt}>{R.numFmt}</option>}
+                {NUMFMT_CHOICES.map((x) => (
+                  <option key={x.value} value={x.value}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Màu nền tiêu đề cột
+              <span className="color-field">
+                <input type="color" value={`#${R.headerFill || 'FFFFFF'}`} onChange={(e) => setS({ headerFill: e.target.value.slice(1).toUpperCase() })} aria-label="Màu nền tiêu đề cột" />
+                <button type="button" className="sm" onClick={() => setS({ headerFill: '' })}>
+                  Không màu
+                </button>
+              </span>
+            </label>
+            <label>
+              Màu chữ tiêu đề cột
+              <input type="color" value={`#${R.headerColor}`} onChange={(e) => setS({ headerColor: e.target.value.slice(1).toUpperCase() })} />
+            </label>
+            <label>
+              Đường viền bảng
+              <select value={R.border} onChange={(e) => setS({ border: e.target.value as FormStyle['border'] })}>
+                <option value="thin">Mảnh</option>
+                <option value="medium">Đậm</option>
+                <option value="hair">Rất mảnh</option>
+                <option value="none">Không viền</option>
+              </select>
+            </label>
+            <label>
+              Chiều cao dòng dữ liệu (pt)
+              <input type="number" min={8} max={200} value={st.rowHeight ?? ''} placeholder="tự động" onChange={(e) => setS({ rowHeight: numIn(e.target.value) })} />
+            </label>
+            <label>
+              Chiều cao dòng tiêu đề cột (pt)
+              <input type="number" min={8} max={200} value={st.headerHeight ?? ''} placeholder="32 / 30" onChange={(e) => setS({ headerHeight: numIn(e.target.value) })} />
+            </label>
+            <label>
+              Khổ giấy
+              <select value={R.paperSize} onChange={(e) => setS({ paperSize: e.target.value as 'A4' | 'A3' })}>
+                <option value="A4">A4</option>
+                <option value="A3">A3</option>
+              </select>
+            </label>
+            <label>
+              Hướng giấy
+              <select value={L.orientation ?? 'landscape'} onChange={(e) => setL({ orientation: e.target.value as 'portrait' | 'landscape' })}>
+                <option value="landscape">Ngang</option>
+                <option value="portrait">Dọc</option>
+              </select>
+            </label>
+            <label>
+              Lề trang
+              <select value={R.margins} onChange={(e) => setS({ margins: e.target.value as FormStyle['margins'] })}>
+                <option value="narrow">Hẹp</option>
+                <option value="normal">Vừa</option>
+                <option value="wide">Rộng</option>
+              </select>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={R.fitWidth} onChange={(e) => setS({ fitWidth: e.target.checked })} /> Thu vừa 1 trang theo chiều ngang
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={R.totalBold} onChange={(e) => setS({ totalBold: e.target.checked })} /> Dòng Tổng in đậm
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={R.gridLines} onChange={(e) => setS({ gridLines: e.target.checked })} /> Hiện lưới ô Excel trên màn hình
+            </label>
+            <div className="form-actions">
+              <button type="button" disabled={!L.style} onClick={() => setL({ style: undefined })}>
+                Về mặc định
+              </button>
+            </div>
+          </div>
+          <p className="muted small">Căn lề, xuống dòng và độ rộng từng cột: phần Cột &amp; công thức, bấm ▸ ở cuối dòng của cột.</p>
+        </>
+      )}
 
       {part === 'columns' && (
         <>
@@ -873,6 +1035,19 @@ function FormEditor({
               { key: 'total', label: 'Cộng ở dòng Tổng', kind: 'bool', default: true, detail: true },
               { key: 'hideIfZeroTotal', label: 'Ẩn cột nếu tổng = 0', kind: 'bool', detail: true },
               { key: 'width', label: 'Độ rộng cột trong Excel (để trống = tự động)', kind: 'number', detail: true },
+              {
+                key: 'align',
+                label: 'Căn lề khi in',
+                kind: 'select',
+                nullable: true,
+                detail: true,
+                options: [
+                  { value: 'left', label: 'Trái' },
+                  { value: 'center', label: 'Giữa' },
+                  { value: 'right', label: 'Phải' },
+                ],
+              },
+              { key: 'wrap', label: 'Xuống dòng khi chữ dài (để trống: chỉ cột diễn giải)', kind: 'bool', detail: true },
             ]}
             sample={
               out
@@ -917,13 +1092,6 @@ function FormEditor({
             <label className="wide">
               Dòng dưới tiêu đề (mỗi dòng một dòng)
               <textarea rows={2} value={(L.extraLines ?? []).join('\n')} onChange={(e) => setL({ extraLines: e.target.value.split('\n') })} />
-            </label>
-            <label>
-              Hướng giấy
-              <select value={L.orientation ?? 'landscape'} onChange={(e) => setL({ orientation: e.target.value as 'portrait' | 'landscape' })}>
-                <option value="landscape">Ngang</option>
-                <option value="portrait">Dọc</option>
-              </select>
             </label>
             <label>
               Vị trí dòng Tổng

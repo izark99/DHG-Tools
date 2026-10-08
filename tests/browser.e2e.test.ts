@@ -236,6 +236,26 @@ describe('browser end-to-end', () => {
     const draft = (await api('GET', `/api/flows/${id}`)).json.draft.config;
     expect(draft.costItems.map((c: { helper: string; budget: string; amount: string }) => `${c.helper}:${c.budget}:${c.amount}`)).toEqual(['0301_LT:HR:luong_thoi_gian', 'PHU_CAP:HR:phu_cap']);
     expect(draft.inputs[0].key).toBe('ma_nv');
+
+    // print style: the preview follows at once
+    await page.getByRole('tab', { name: /^Form 02/ }).click();
+    await page.getByRole('button', { name: 'Định dạng in' }).click();
+    await page.getByLabel('Font chữ').fill('Times New Roman');
+    await page.getByLabel('Cỡ chữ tiêu đề').fill('18');
+    expect(await page.locator('.fp-paper').evaluate((e) => getComputedStyle(e).fontFamily)).toContain('Times New Roman');
+    expect(await page.locator('.fp-title').evaluate((e) => getComputedStyle(e).fontSize)).toBe('24px');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/form-style.png`, fullPage: true });
+
+    // delete the flow: the code must be typed first
+    await page.goto(`${BASE}/#/admin/flows`);
+    await page.locator('tr', { hasText: id }).getByRole('button', { name: 'Xoá' }).click();
+    const del = page.locator('.modal').getByRole('button', { name: 'Xoá vĩnh viễn' });
+    expect(await del.isDisabled()).toBe(true);
+    await page.getByLabel('Mã flow cần xoá').fill(id);
+    await del.click();
+    await page.getByText(`Đã xoá flow ${id}.`).waitFor();
+    await expect.poll(() => page.locator('tr', { hasText: id }).count()).toBe(0);
+    expect((await api('GET', '/api/flows')).json.flows.some((f: { id: string }) => f.id === id)).toBe(false);
   });
 
   it('versions are effective-dated: each period runs the version in force for it', async () => {
@@ -463,6 +483,7 @@ describe('browser end-to-end', () => {
         '/api/flows',
         `/api/flows/${FLOW}/draft`,
         `/api/flows/Q${RUN}/draft`,
+        `/api/flows/Q${RUN}`,
         `/api/flows/${FLOW}/publish`,
         `/api/flows/${FLOW}/versions/2`,
         `/api/ledger-marks/e2e${RUN}`,

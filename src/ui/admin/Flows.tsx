@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { api, errMsg } from '../../api';
+import { api, errMsg, type FlowSummary } from '../../api';
 import type { FlowConfig } from '../../engine/types';
 import { Alert, FilePick, useAsync } from '../common';
-import { Card, Icon, PageHeader } from '../layout';
+import { Card, Icon, Modal, PageHeader, toast } from '../layout';
 import { blankConfig } from './blank';
 import { Guide, T } from '../texts';
 
@@ -13,6 +13,7 @@ export function FlowsPage() {
   const [fromFile, setFromFile] = useState<FlowConfig | null>(null);
   const [fromName, setFromName] = useState('');
   const [copyOf, setCopyOf] = useState('');
+  const [deleting, setDeleting] = useState<FlowSummary | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const create = async () => {
@@ -43,6 +44,16 @@ export function FlowsPage() {
         subtitle={<T k="flows.subtitle">Mỗi flow là một bộ cấu hình: input, công thức, cost item, Form 02/03, kiểm tra. Người dùng luôn chạy phiên bản publish mới nhất.</T>}
       />
       <Guide k="flows.guide" />
+      {deleting && (
+        <DeleteFlow
+          flow={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            list.reload();
+          }}
+        />
+      )}
       {list.error && <Alert kind="error">{list.error}</Alert>}
       {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       <Card title={<T k="flows.list">Danh sách flow</T>}>
@@ -88,9 +99,14 @@ export function FlowsPage() {
                   </label>
                 </td>
                 <td>
-                  <a className="button sm" href={`#/admin/flows/${encodeURIComponent(f.id)}`}>
-                    Sửa cấu hình
-                  </a>
+                  <div className="row gap">
+                    <a className="button sm" href={`#/admin/flows/${encodeURIComponent(f.id)}`}>
+                      Sửa cấu hình
+                    </a>
+                    <button type="button" className="sm danger" onClick={() => setDeleting(f)}>
+                      <Icon name="trash" size={14} /> Xoá
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -153,5 +169,51 @@ export function FlowsPage() {
         </button>
       </Card>
     </>
+  );
+}
+
+/** Delete a flow after typing its code; published flows get a stronger warning and the "hide" alternative. */
+function DeleteFlow({ flow, onClose, onDeleted }: { flow: FlowSummary; onClose: () => void; onDeleted: () => void }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      await api.deleteFlow(flow.id);
+      toast('ok', `Đã xoá flow ${flow.id}.`);
+      onDeleted();
+    } catch (e) {
+      toast('error', errMsg(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Xoá flow ${flow.id}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={busy}>
+            Huỷ
+          </button>
+          <button type="button" className="danger" disabled={typed !== flow.id || busy} onClick={run}>
+            <Icon name="trash" size={16} /> Xoá vĩnh viễn
+          </button>
+        </>
+      }
+    >
+      <p>
+        Xoá flow <b data-no-text-edit="">{flow.name}</b> cùng mọi phiên bản và bản nháp. Không khôi phục được (trừ khi có file Backup). Nhật ký các lần chạy vẫn được giữ.
+      </p>
+      {flow.published && (
+        <div className="alert alert-warning">
+          Flow này đang được dùng (phiên bản v{flow.published.version}). Nếu chỉ muốn người dùng không thấy nữa, bỏ chọn <i>hiện cho người dùng</i> thay vì xoá.
+        </div>
+      )}
+      <label className="field">
+        Gõ mã flow <code data-no-text-edit="">{flow.id}</code> để xác nhận
+        <input value={typed} onChange={(e) => setTyped(e.target.value.trim())} autoFocus aria-label="Mã flow cần xoá" />
+      </label>
+    </Modal>
   );
 }
