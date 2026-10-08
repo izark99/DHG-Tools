@@ -185,6 +185,20 @@ describe('browser end-to-end', () => {
     await page.locator('table.ge tbody tr[data-row="3"] .grid-handle').press('ArrowDown');
     expect(await label(4).inputValue()).toBe('Phụ cấp');
 
+    // Form 01 preview: every employee, totals; a row click follows that employee, a header opens the column
+    await page.getByRole('button', { name: 'Xem trước bảng nhân viên (Form 01)' }).click();
+    const prev = page.locator('.emp-preview');
+    await prev.getByText('3 / 3 nhân viên').waitFor();
+    expect(await prev.locator('tbody tr').count()).toBe(3);
+    await prev.locator('tfoot').getByText('30,000,000').waitFor();
+    await prev.locator('tbody tr', { hasText: '0101' }).click();
+    expect(await page.getByLabel('Nhân viên mẫu').inputValue()).toBe('0101');
+    await prev.getByPlaceholder('Tìm mã, tên, giá trị…').fill('0200');
+    await prev.getByText('1 / 3 nhân viên').waitFor();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/editor-form01.png`, fullPage: true });
+    await prev.locator('thead th', { hasText: 'Lương' }).first().click();
+    await page.locator('table.ge tr.ge-flash[data-row="2"]').waitFor();
+
     // checks show their result on the sample
     await page.getByRole('tab', { name: /^Kiểm tra/ }).click();
     await page.locator('table.ge tbody tr[data-row="0"]').getByText('✓ đạt').waitFor();

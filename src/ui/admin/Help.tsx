@@ -233,7 +233,11 @@ const SECTIONS: Section[] = [
             </tr>
             <tr>
               <td>4. Bảng nhân viên</td>
-              <td>Mỗi dòng của bảng là một cột tính cho từng nhân viên, theo thứ tự (chỉ dùng cột phía trên). Tương ứng sheet Form 01.</td>
+              <td>
+                Mỗi dòng của bảng là một cột tính cho từng nhân viên, theo thứ tự (chỉ dùng cột phía trên). Tương ứng sheet Form 01. Phần{' '}
+                <b>Xem trước bảng nhân viên (Form 01)</b>: toàn bộ nhân viên của dữ liệu mẫu với mọi cột, dòng Σ, ô tìm kiếm; bấm một dòng để theo dõi nhân viên đó ở các
+                bước, bấm tiêu đề cột để mở công thức của cột.
+              </td>
             </tr>
             <tr>
               <td>5. Cost items</td>

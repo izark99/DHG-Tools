@@ -21,6 +21,7 @@ import { SampleBar, SampleValue, sumBy, useSample } from './Sample';
 import { FormPreview } from './FormPreview';
 import { FONT_CHOICES, NUMFMT_CHOICES, resolveStyle } from '../../excel/formStyle';
 import { QuickStart } from './QuickStart';
+import { EmployeePreview } from './EmployeePreview';
 import { Versions } from './Versions';
 import { EffectiveDialog, range } from './Effective';
 
@@ -129,6 +130,7 @@ function Editor({
   const { sample, bar } = useSample(cfg, masters);
   const [sampleOpen, setSampleOpen] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [empPart, setEmpPart] = useState<'columns' | 'preview'>('columns');
   const applyQuick = (patch: Partial<FlowConfig>, file: File) => {
     set(patch);
     setQuick(false);
@@ -494,6 +496,30 @@ function Editor({
                   <FormulaInput optional value={cfg.employeeTable.rowFilter} info={at({ kind: 'employeeFilter' })} onChange={(v) => set({ employeeTable: { ...cfg.employeeTable, rowFilter: v || null } })} />
                 </label>
               </div>
+              <div className="seg" role="group" aria-label="Phần bảng nhân viên">
+                <button type="button" className={empPart === 'columns' ? 'on' : undefined} aria-pressed={empPart === 'columns'} onClick={() => setEmpPart('columns')}>
+                  Cột &amp; công thức
+                </button>
+                <button type="button" className={empPart === 'preview' ? 'on' : undefined} aria-pressed={empPart === 'preview'} onClick={() => setEmpPart('preview')}>
+                  Xem trước bảng nhân viên (Form 01)
+                </button>
+              </div>
+              {empPart === 'preview' && (
+                <EmployeePreview
+                  cols={cfg.employeeTable.columns}
+                  result={r}
+                  empKey={emp?.key ?? ''}
+                  onPickEmp={bar.setEmpKey}
+                  onLoadSample={() => setSampleOpen(true)}
+                  onColumn={(i) => {
+                    setEmpPart('columns');
+                    setFocus(null);
+                    setTimeout(() => setFocus({ tab: 'employee', index: i }), 0);
+                  }}
+                />
+              )}
+              {empPart === 'columns' && (
+              <>
               <p className="muted small">
                 Mỗi dòng dưới đây là một cột của bảng nhân viên, tính từ trên xuống (chỉ dùng được cột phía trên). Kéo ⠿ để đổi thứ tự. Hay dùng: SUMOF(in.File.cột) = tổng của nhân viên trong file; LOOKUP("Bảng", khoá, "Cột", mặc định) = tra bảng master; P.khoá = tham số trong bảng Params.
               </p>
@@ -517,6 +543,8 @@ function Editor({
                 sampleLabel={emp ? `Giá trị của ${emp.key} · Σ tổng mọi nhân viên` : 'Mẫu'}
                 sampleIn="formula"
               />
+              </>
+              )}
             </div>
           )}
 
